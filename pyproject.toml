@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "fasthx-admin"
-version = "0.1.0"
+version = "0.1.1"
 description = "FastAPI + HTMX + Jinja2 admin interface framework — a modern replacement for Flask-Admin"
 readme = "README.md"
 license = "MIT"
