@@ -1,0 +1,4 @@
+<option value="">-- Select --</option>
+{% for opt in options %}
+<option value="{{ opt.id }}" {% if opt.id == selected %}selected{% endif %}>{{ opt.label }}</option>
+{% endfor %}

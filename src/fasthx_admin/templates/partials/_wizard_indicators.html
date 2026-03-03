@@ -1,0 +1,21 @@
+<div class="wizard-steps">
+    <div class="wizard-step-indicator {% if step >= 1 %}active{% endif %} {% if step > 1 %}completed{% endif %}">
+        <div class="step-number">1</div>
+        <div class="step-label">Select Device</div>
+    </div>
+    <div class="wizard-step-connector {% if step > 1 %}active{% endif %}"></div>
+    <div class="wizard-step-indicator {% if step >= 2 %}active{% endif %} {% if step > 2 %}completed{% endif %}">
+        <div class="step-number">2</div>
+        <div class="step-label">Configure WAN</div>
+    </div>
+    <div class="wizard-step-connector {% if step > 2 %}active{% endif %}"></div>
+    <div class="wizard-step-indicator {% if step >= 3 %}active{% endif %} {% if step > 3 %}completed{% endif %}">
+        <div class="step-number">3</div>
+        <div class="step-label">Review</div>
+    </div>
+    <div class="wizard-step-connector {% if step > 3 %}active{% endif %}"></div>
+    <div class="wizard-step-indicator {% if step >= 4 %}active{% endif %}">
+        <div class="step-number">4</div>
+        <div class="step-label">Deploy</div>
+    </div>
+</div>

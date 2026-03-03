@@ -1,0 +1,57 @@
+{% extends "base.html" %}
+
+{% block title %}{{ title }}{% endblock %}
+{% block page_title %}{{ title }}{% endblock %}
+
+{% block content %}
+<div class="mb-3">
+    <a href="/{{ view.name }}" class="btn btn-outline-secondary btn-sm">
+        <i class="bi bi-arrow-left"></i> Back to list
+    </a>
+</div>
+
+<div class="card">
+    <div class="card-body">
+        <form method="post" action="{{ action }}">
+            {% if form_sections %}
+            <div class="accordion" id="formAccordion">
+                {% for section_name, section_fields in form_sections.items() %}
+                <div class="accordion-item">
+                    <h2 class="accordion-header">
+                        <button class="accordion-button {% if not loop.first %}collapsed{% endif %}"
+                                type="button"
+                                data-bs-toggle="collapse"
+                                data-bs-target="#section-{{ loop.index }}">
+                            {{ section_name }}
+                        </button>
+                    </h2>
+                    <div id="section-{{ loop.index }}"
+                         class="accordion-collapse collapse {% if loop.first %}show{% endif %}"
+                         data-bs-parent="#formAccordion">
+                        <div class="accordion-body">
+                            {% for field in form_fields %}
+                            {% if field.key in section_fields %}
+                            {% include "partials/_form_field.html" %}
+                            {% endif %}
+                            {% endfor %}
+                        </div>
+                    </div>
+                </div>
+                {% endfor %}
+            </div>
+            {% else %}
+            {% for field in form_fields %}
+            {% include "partials/_form_field.html" %}
+            {% endfor %}
+            {% endif %}
+
+            <div class="mt-4">
+                <button type="submit" class="btn btn-primary">
+                    <i class="bi bi-check-lg"></i> Save
+                </button>
+                <a href="/{{ view.name }}" class="btn btn-outline-secondary">Cancel</a>
+            </div>
+        </form>
+    </div>
+</div>
+{% endblock %}

@@ -1,0 +1,89 @@
+{% extends "base.html" %}
+
+{% block title %}{{ view.display_name }}{% endblock %}
+{% block page_title %}{{ view.display_name }}{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-4">
+    <div>
+        <span class="badge bg-secondary">{{ total }} record{{ 's' if total != 1 }}</span>
+    </div>
+    <div class="d-flex gap-2">
+        <div class="search-box">
+            <input type="search"
+                   class="form-control form-control-sm"
+                   placeholder="Search {{ view.display_name }}..."
+                   name="q"
+                   value="{{ search }}"
+                   hx-get="/{{ view.name }}?partial=1"
+                   hx-trigger="keyup changed delay:300ms"
+                   hx-target="#table-body"
+                   hx-include="this"
+                   hx-indicator="#search-spinner">
+            <span class="htmx-indicator" id="search-spinner">
+                <span class="spinner-border spinner-border-sm"></span>
+            </span>
+        </div>
+        {% if view.can_create %}
+        <a href="/{{ view.name }}/create" class="btn btn-primary btn-sm">
+            <i class="bi bi-plus-lg"></i> Create
+        </a>
+        {% endif %}
+    </div>
+</div>
+
+<div class="card">
+    <div class="table-responsive">
+        <table class="table table-hover mb-0">
+            <thead>
+                <tr>
+                    {% for col in columns %}
+                    <th>
+                        {% if col.sortable %}
+                        <a href="/{{ view.name }}?sort={{ col.key }}&order={{ 'desc' if sort == col.key and order == 'asc' else 'asc' }}&q={{ search }}"
+                           class="sort-link {% if sort == col.key %}active{% endif %}">
+                            {{ col.label }}
+                            {% if sort == col.key %}
+                            <i class="bi bi-chevron-{{ 'up' if order == 'asc' else 'down' }}"></i>
+                            {% endif %}
+                        </a>
+                        {% else %}
+                        {{ col.label }}
+                        {% endif %}
+                    </th>
+                    {% endfor %}
+                    {% if row_actions %}
+                    <th class="text-end">Actions</th>
+                    {% endif %}
+                </tr>
+            </thead>
+            <tbody id="table-body">
+                {% include "partials/table_body.html" %}
+            </tbody>
+        </table>
+    </div>
+</div>
+
+<!-- Pagination -->
+{% if total_pages > 1 %}
+<nav class="mt-3">
+    <ul class="pagination pagination-sm justify-content-center">
+        <li class="page-item {% if page <= 1 %}disabled{% endif %}">
+            <a class="page-link" href="/{{ view.name }}?page={{ page - 1 }}&q={{ search }}&sort={{ sort }}&order={{ order }}">
+                <i class="bi bi-chevron-left"></i>
+            </a>
+        </li>
+        {% for p in range(1, total_pages + 1) %}
+        <li class="page-item {% if p == page %}active{% endif %}">
+            <a class="page-link" href="/{{ view.name }}?page={{ p }}&q={{ search }}&sort={{ sort }}&order={{ order }}">{{ p }}</a>
+        </li>
+        {% endfor %}
+        <li class="page-item {% if page >= total_pages %}disabled{% endif %}">
+            <a class="page-link" href="/{{ view.name }}?page={{ page + 1 }}&q={{ search }}&sort={{ sort }}&order={{ order }}">
+                <i class="bi bi-chevron-right"></i>
+            </a>
+        </li>
+    </ul>
+</nav>
+{% endif %}
+{% endblock %}

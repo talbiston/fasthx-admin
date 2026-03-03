@@ -1,0 +1,163 @@
+{% if step == 1 %}
+<div class="wizard-step" id="wizard-step-1">
+    <h5>Step 1: Select Customer & Edge</h5>
+    <p class="text-muted">Choose the customer and edge device to deploy.</p>
+
+    <div class="mb-3">
+        <label for="customer_id" class="form-label">Customer</label>
+        <select name="customer_id" id="customer_id" class="form-select" required
+                hx-get="/api/orchestrators-for-customer"
+                hx-trigger="change"
+                hx-target="#orchestrator_id"
+                hx-include="this">
+            <option value="">-- Select Customer --</option>
+            {% for c in customers %}
+            <option value="{{ c.id }}">{{ c.name }} ({{ c.sid }})</option>
+            {% endfor %}
+        </select>
+    </div>
+
+    <div class="mb-3">
+        <label for="orchestrator_id" class="form-label">Orchestrator</label>
+        <select name="orchestrator_id" id="orchestrator_id" class="form-select" required>
+            <option value="">-- Select Customer first --</option>
+        </select>
+    </div>
+
+    <div class="mb-3">
+        <label for="edge_id" class="form-label">Edge Device</label>
+        <select name="edge_id" id="edge_id" class="form-select" required>
+            <option value="">-- Select --</option>
+            {% for e in edges %}
+            <option value="{{ e.id }}">{{ e.hostname }} ({{ e.serial_number }})</option>
+            {% endfor %}
+        </select>
+    </div>
+
+    <div class="d-flex justify-content-end">
+        <button class="btn btn-primary"
+                hx-post="/wizard/step/2"
+                hx-target="#wizard-content"
+                hx-include="#wizard-form">
+            Next <i class="bi bi-arrow-right"></i>
+        </button>
+    </div>
+</div>
+
+{% elif step == 2 %}
+<div class="wizard-step" id="wizard-step-2">
+    <h5>Step 2: Configure WAN</h5>
+    <p class="text-muted">Configure the WAN interface settings.</p>
+
+    <input type="hidden" name="customer_id" value="{{ data.get('customer_id', '') }}">
+    <input type="hidden" name="orchestrator_id" value="{{ data.get('orchestrator_id', '') }}">
+    <input type="hidden" name="edge_id" value="{{ data.get('edge_id', '') }}">
+
+    <div class="row">
+        <div class="col-md-6 mb-3">
+            <label for="wan_ip" class="form-label">WAN IP Address</label>
+            <input type="text" class="form-control" name="wan_ip" id="wan_ip"
+                   placeholder="192.168.1.1" value="{{ data.get('wan_ip', '') }}">
+        </div>
+        <div class="col-md-6 mb-3">
+            <label for="wan_subnet" class="form-label">Subnet Mask</label>
+            <input type="text" class="form-control" name="wan_subnet" id="wan_subnet"
+                   placeholder="255.255.255.0" value="{{ data.get('wan_subnet', '') }}">
+        </div>
+    </div>
+    <div class="row">
+        <div class="col-md-6 mb-3">
+            <label for="wan_gateway" class="form-label">Gateway</label>
+            <input type="text" class="form-control" name="wan_gateway" id="wan_gateway"
+                   placeholder="192.168.1.254" value="{{ data.get('wan_gateway', '') }}">
+        </div>
+        <div class="col-md-6 mb-3">
+            <label for="wan_dns" class="form-label">DNS Server</label>
+            <input type="text" class="form-control" name="wan_dns" id="wan_dns"
+                   placeholder="8.8.8.8" value="{{ data.get('wan_dns', '') }}">
+        </div>
+    </div>
+
+    <div class="d-flex justify-content-between">
+        <button class="btn btn-outline-secondary"
+                hx-post="/wizard/step/1"
+                hx-target="#wizard-content"
+                hx-include="#wizard-form">
+            <i class="bi bi-arrow-left"></i> Back
+        </button>
+        <button class="btn btn-primary"
+                hx-post="/wizard/step/3"
+                hx-target="#wizard-content"
+                hx-include="#wizard-form">
+            Next <i class="bi bi-arrow-right"></i>
+        </button>
+    </div>
+</div>
+
+{% elif step == 3 %}
+<div class="wizard-step" id="wizard-step-3">
+    <h5>Step 3: Review</h5>
+    <p class="text-muted">Review your deployment configuration before proceeding.</p>
+
+    <input type="hidden" name="customer_id" value="{{ data.get('customer_id', '') }}">
+    <input type="hidden" name="orchestrator_id" value="{{ data.get('orchestrator_id', '') }}">
+    <input type="hidden" name="edge_id" value="{{ data.get('edge_id', '') }}">
+    <input type="hidden" name="wan_ip" value="{{ data.get('wan_ip', '') }}">
+    <input type="hidden" name="wan_subnet" value="{{ data.get('wan_subnet', '') }}">
+    <input type="hidden" name="wan_gateway" value="{{ data.get('wan_gateway', '') }}">
+    <input type="hidden" name="wan_dns" value="{{ data.get('wan_dns', '') }}">
+
+    <div class="card mb-3">
+        <div class="card-body">
+            <table class="table table-sm mb-0">
+                <tr><th>Customer</th><td>{{ data.get('customer_name', 'ID: ' + data.get('customer_id', 'N/A')) }}</td></tr>
+                <tr><th>Orchestrator</th><td>{{ data.get('orchestrator_name', 'ID: ' + data.get('orchestrator_id', 'N/A')) }}</td></tr>
+                <tr><th>Edge Device</th><td>{{ data.get('edge_name', 'ID: ' + data.get('edge_id', 'N/A')) }}</td></tr>
+                <tr><th>WAN IP</th><td>{{ data.get('wan_ip', 'Not set') }}</td></tr>
+                <tr><th>Subnet</th><td>{{ data.get('wan_subnet', 'Not set') }}</td></tr>
+                <tr><th>Gateway</th><td>{{ data.get('wan_gateway', 'Not set') }}</td></tr>
+                <tr><th>DNS</th><td>{{ data.get('wan_dns', 'Not set') }}</td></tr>
+            </table>
+        </div>
+    </div>
+
+    <div class="d-flex justify-content-between">
+        <button class="btn btn-outline-secondary"
+                hx-post="/wizard/step/2"
+                hx-target="#wizard-content"
+                hx-include="#wizard-form">
+            <i class="bi bi-arrow-left"></i> Back
+        </button>
+        <button class="btn btn-success"
+                hx-post="/wizard/step/4"
+                hx-target="#wizard-content"
+                hx-include="#wizard-form">
+            <i class="bi bi-rocket"></i> Deploy
+        </button>
+    </div>
+</div>
+
+{% elif step == 4 %}
+<div class="wizard-step" id="wizard-step-4">
+    <h5>Step 4: Deployment</h5>
+
+    <div class="text-center py-4" id="deploy-status"
+         hx-get="/wizard/deploy-status/{{ data.get('edge_id', '0') }}"
+         hx-trigger="every 1s"
+         hx-swap="innerHTML">
+        <div class="spinner-border text-primary mb-3" role="status"></div>
+        <p class="text-muted">Starting deployment...</p>
+        <div class="progress mx-auto" style="max-width: 400px; height: 20px;">
+            <div class="progress-bar progress-bar-striped progress-bar-animated"
+                 style="width: 0%">0%</div>
+        </div>
+    </div>
+</div>
+{% endif %}
+
+{% if request.headers.get('HX-Request') %}
+<!-- Out-of-band swap: update the step indicators in the card header -->
+<div id="wizard-header" hx-swap-oob="innerHTML">
+    {% include "partials/_wizard_indicators.html" %}
+</div>
+{% endif %}

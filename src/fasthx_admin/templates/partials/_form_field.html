@@ -1,0 +1,55 @@
+<div class="mb-3">
+    {% if field.type == 'checkbox' %}
+    <div class="form-check form-switch">
+        <input type="checkbox" name="{{ field.key }}" id="{{ field.key }}"
+               class="form-check-input" role="switch"
+               value="true"
+               {% if field.value %}checked{% endif %}>
+        <label for="{{ field.key }}" class="form-check-label">
+            {{ field.label }}
+        </label>
+    </div>
+
+    {% elif field.type == 'select' %}
+    <label for="{{ field.key }}" class="form-label">
+        {{ field.label }}
+        {% if field.required %}<span class="text-danger">*</span>{% endif %}
+    </label>
+    <select name="{{ field.key }}" id="{{ field.key }}"
+            class="form-select"
+            {% if field.required %}required{% endif %}
+            {% if field.get('hx_get') %}
+            hx-get="{{ field.hx_get }}"
+            hx-trigger="change"
+            hx-target="{{ field.hx_target }}"
+            hx-include="this"
+            {% endif %}>
+        <option value="">-- Select --</option>
+        {% if field.choices %}
+        {% for val, label in field.choices %}
+        <option value="{{ val }}" {% if field.value is not none and field.value|string == val|string %}selected{% endif %}>{{ label }}</option>
+        {% endfor %}
+        {% endif %}
+    </select>
+
+    {% elif field.type == 'textarea' %}
+    <label for="{{ field.key }}" class="form-label">
+        {{ field.label }}
+        {% if field.required %}<span class="text-danger">*</span>{% endif %}
+    </label>
+    <textarea name="{{ field.key }}" id="{{ field.key }}"
+              class="form-control" rows="3"
+              {% if field.required %}required{% endif %}>{{ field.value or '' }}</textarea>
+
+    {% else %}
+    <label for="{{ field.key }}" class="form-label">
+        {{ field.label }}
+        {% if field.required %}<span class="text-danger">*</span>{% endif %}
+    </label>
+    <input type="{{ field.type }}" name="{{ field.key }}" id="{{ field.key }}"
+           class="form-control"
+           value="{{ field.value if field.value is not none else '' }}"
+           {% if field.required %}required{% endif %}
+           {% if field.get('placeholder') %}placeholder="{{ field.placeholder }}"{% endif %}>
+    {% endif %}
+</div>

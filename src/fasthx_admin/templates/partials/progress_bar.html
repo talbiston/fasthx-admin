@@ -1,0 +1,25 @@
+<tr class="progress-row" id="progress-{{ edge_id }}"
+    {% if progress < 100 %}
+    hx-get="/edges/{{ edge_id }}/progress"
+    hx-trigger="every 500ms"
+    hx-swap="outerHTML"
+    {% endif %}>
+    <td colspan="{{ colspan | default(8) }}">
+        <div class="d-flex align-items-center gap-3 px-3 py-2">
+            <span class="text-muted small">Deploying edge #{{ edge_id }}:</span>
+            <div class="progress flex-grow-1" style="height: 20px;">
+                <div class="progress-bar progress-bar-striped {% if progress < 100 %}progress-bar-animated{% endif %} {% if progress >= 100 %}bg-success{% endif %}"
+                     role="progressbar"
+                     style="width: {{ progress }}%"
+                     aria-valuenow="{{ progress }}"
+                     aria-valuemin="0"
+                     aria-valuemax="100">
+                    {{ progress }}%
+                </div>
+            </div>
+            <span class="badge {% if progress >= 100 %}bg-success{% else %}bg-primary{% endif %}">
+                {% if progress >= 100 %}Complete{% else %}{{ status }}{% endif %}
+            </span>
+        </div>
+    </td>
+</tr>

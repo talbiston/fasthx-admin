@@ -1,0 +1,19 @@
+{% extends "base.html" %}
+
+{% block title %}Deploy Wizard{% endblock %}
+{% block page_title %}Deploy Wizard{% endblock %}
+
+{% block content %}
+<div class="card">
+    <div class="card-header" id="wizard-header">
+        {% include "partials/_wizard_indicators.html" %}
+    </div>
+    <div class="card-body">
+        <form id="wizard-form">
+            <div id="wizard-content">
+                {% include "partials/wizard_step.html" %}
+            </div>
+        </form>
+    </div>
+</div>
+{% endblock %}

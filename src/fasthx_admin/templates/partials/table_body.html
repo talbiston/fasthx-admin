@@ -1,0 +1,29 @@
+{% for row in rows %}
+<tr>
+    {% for col in columns %}
+    <td>
+        {% set cell = row.cells[col.key] %}
+        {% if cell.htmx %}
+        <span hx-get="{{ cell.htmx.url | replace('{id}', row._id|string) }}"
+              hx-trigger="{{ cell.htmx.trigger | default('every 3s') }}"
+              hx-swap="innerHTML">
+            {{ (cell.formatted if cell.formatted is not none else '') | safe }}
+        </span>
+        {% else %}
+        {{ (cell.formatted if cell.formatted is not none else '') | safe }}
+        {% endif %}
+    </td>
+    {% endfor %}
+    {% if row_actions %}
+    <td class="text-end">
+        {% include "partials/row_actions.html" %}
+    </td>
+    {% endif %}
+</tr>
+{% else %}
+<tr>
+    <td colspan="{{ columns|length + (1 if row_actions else 0) }}" class="text-center text-muted py-4">
+        No records found.
+    </td>
+</tr>
+{% endfor %}

@@ -1,0 +1,21 @@
+{% if status == 'online' %}
+<span class="badge bg-success"><i class="bi bi-circle-fill"></i> Online</span>
+{% elif status == 'offline' %}
+<span class="badge bg-secondary"><i class="bi bi-circle-fill"></i> Offline</span>
+{% elif status == 'deploying' %}
+<span class="badge bg-warning text-dark"><i class="bi bi-arrow-repeat spin"></i> Deploying</span>
+{% elif status == 'error' %}
+<span class="badge bg-danger"><i class="bi bi-exclamation-triangle"></i> Error</span>
+{% elif status == 'pending' %}
+<span class="badge bg-info"><i class="bi bi-clock"></i> Pending</span>
+{% elif status == 'idle' %}
+<span class="badge bg-light text-dark"><i class="bi bi-circle"></i> Idle</span>
+{% elif status == 'building' %}
+<span class="badge bg-warning text-dark"><i class="bi bi-arrow-repeat spin"></i> Building</span>
+{% elif status == 'success' %}
+<span class="badge bg-success"><i class="bi bi-check-circle"></i> Success</span>
+{% elif status == 'failed' %}
+<span class="badge bg-danger"><i class="bi bi-x-circle"></i> Failed</span>
+{% else %}
+<span class="badge bg-secondary">{{ status }}</span>
+{% endif %}

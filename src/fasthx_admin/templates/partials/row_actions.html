@@ -1,0 +1,39 @@
+<div class="btn-group btn-group-sm">
+    <a href="/{{ view.name }}/{{ row._id }}" class="btn btn-outline-secondary" title="View">
+        <i class="bi bi-eye"></i>
+    </a>
+    {% if view.can_edit %}
+    <a href="/{{ view.name }}/{{ row._id }}/edit" class="btn btn-outline-secondary" title="Edit">
+        <i class="bi bi-pencil"></i>
+    </a>
+    {% endif %}
+    {% for action in row_actions %}
+    <button class="btn {{ action.get('class', 'btn-outline-primary') }}"
+            title="{{ action.label }}"
+            {% if action.get('hx_post') %}
+            hx-post="{{ action.hx_post | replace('{id}', row._id|string) }}"
+            hx-target="{{ action.get('hx_target', 'closest tr') }}"
+            hx-swap="{{ action.get('hx_swap', 'afterend') }}"
+            {% elif action.get('endpoint') %}
+            hx-post="{{ action.endpoint | replace('{id}', row._id|string) }}"
+            hx-swap="afterend"
+            hx-target="closest tr"
+            {% endif %}
+            {% if action.get('confirm') %}
+            hx-confirm="{{ action.confirm }}"
+            {% endif %}>
+        {% if action.get('icon') %}<i class="bi bi-{{ action.icon }}"></i>{% endif %}
+        {{ action.label }}
+    </button>
+    {% endfor %}
+    {% if view.can_delete %}
+    <button class="btn btn-outline-danger"
+            title="Delete"
+            hx-post="/{{ view.name }}/{{ row._id }}/delete"
+            hx-target="closest tr"
+            hx-swap="outerHTML"
+            hx-confirm="Are you sure you want to delete this record?">
+        <i class="bi bi-trash"></i>
+    </button>
+    {% endif %}
+</div>

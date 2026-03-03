@@ -1,0 +1,32 @@
+{% extends "base.html" %}
+
+{% block title %}{{ view.display_name }} Detail{% endblock %}
+{% block page_title %}{{ view.display_name }} #{{ item.id }}{% endblock %}
+
+{% block content %}
+<div class="mb-3">
+    <a href="/{{ view.name }}" class="btn btn-outline-secondary btn-sm">
+        <i class="bi bi-arrow-left"></i> Back to list
+    </a>
+    {% if view.can_edit %}
+    <a href="/{{ view.name }}/{{ item.id }}/edit" class="btn btn-primary btn-sm">
+        <i class="bi bi-pencil"></i> Edit
+    </a>
+    {% endif %}
+</div>
+
+<div class="card">
+    <div class="card-body">
+        <table class="table table-striped">
+            <tbody>
+                {% for field in fields %}
+                <tr>
+                    <th style="width: 200px;">{{ field.label }}</th>
+                    <td>{{ (field.value if field.value is not none else '') | safe }}</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+{% endblock %}
