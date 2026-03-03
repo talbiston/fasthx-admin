@@ -8,7 +8,8 @@ FastAPI dependency.
 
 from __future__ import annotations
 
-from sqlalchemy import create_engine, Engine
+from sqlalchemy import create_engine
+from sqlalchemy.engine import Engine
 from sqlalchemy.orm import sessionmaker, declarative_base, Session
 
 Base = declarative_base()
