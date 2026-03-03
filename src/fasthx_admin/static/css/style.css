@@ -649,6 +649,11 @@ body {
     box-shadow: 0 4px 12px var(--shadow);
 }
 
+/* Prevent table-responsive overflow from clipping action dropdowns */
+.table-responsive {
+    overflow: visible !important;
+}
+
 .row-actions-dropdown .dropdown-item {
     color: var(--text);
     padding: 0.4rem 0.75rem;
