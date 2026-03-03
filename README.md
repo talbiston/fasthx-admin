@@ -23,6 +23,7 @@ A modern admin interface framework for FastAPI built with HTMX, Jinja2, and Boot
   - [Permissions](#permissions)
 - [Custom Endpoints](#custom-endpoints)
 - [Dependent Dropdowns](#dependent-dropdowns)
+- [Progress Bar](#progress-bar)
 - [Authentication](#authentication)
 - [Custom Pages (Dashboard, Wizard, etc.)](#custom-pages-dashboard-wizard-etc)
 - [Templates](#templates)
@@ -612,6 +613,270 @@ class DeviceView(CRUDView):
 ```
 
 The `partials/dropdown_options.html` template renders `<option>` tags that replace the target `<select>`'s contents.
+
+---
+
+## Progress Bar
+
+fasthx-admin includes a built-in progress bar partial (`partials/progress_bar.html`) that uses HTMX auto-polling to show real-time deployment or task progress. The progress bar appears inline in the list table, polls the server every 500ms, and stops polling automatically when it reaches 100%.
+
+### How it works
+
+1. A **row action** button sends an HTMX POST to start the operation
+2. The POST endpoint returns the `progress_bar.html` partial, which is inserted after the row (`hx-swap="afterend"`)
+3. The progress bar contains `hx-get` and `hx-trigger="every 500ms"` -- HTMX auto-polls the server
+4. Each poll response returns an updated progress bar (with a higher percentage)
+5. When progress reaches 100%, the template removes the `hx-get`/`hx-trigger` attributes, stopping polling
+
+### Step 1: Add instance state
+
+Your view needs a dictionary to track in-progress operations. Set it **before** calling `super().__init__()`:
+
+```python
+from typing import Dict
+
+class EdgeView(CRUDView):
+    model = FortiEdge
+
+    def __init__(self, templates):
+        self.deploy_progress: Dict[int, dict] = {}  # {item_id: {"progress": int, "status": str}}
+        super().__init__(templates)
+```
+
+### Step 2: Add a row action button
+
+Configure a "Deploy" button that triggers the operation. The key settings are `hx_swap: "afterend"` and `hx_target: "closest tr"` -- this inserts the progress bar as a new row directly below the clicked row.
+
+```python
+class EdgeView(CRUDView):
+    model = FortiEdge
+    row_actions = [
+        {
+            "label": "Deploy",
+            "icon": "rocket",
+            "hx_post": "/edges/{id}/deploy",   # {id} is replaced with the row's primary key
+            "hx_swap": "afterend",             # Insert the progress bar AFTER this row
+            "hx_target": "closest tr",         # Target the current table row
+            "class": "btn-outline-success",
+        },
+    ]
+```
+
+### Step 3: Create the deploy endpoint
+
+This endpoint starts the operation, initializes tracking state, and returns the initial progress bar (at 0%). Use `get_colspan()` to make the progress bar span the full table width.
+
+```python
+import time
+from fastapi import Request, Depends
+from fastapi.responses import HTMLResponse
+from sqlalchemy.orm import Session
+from fasthx_admin import get_db
+
+class EdgeView(CRUDView):
+    model = FortiEdge
+
+    def setup_endpoints(self):
+        view = self
+        model = self.model
+        templates = self.templates
+
+        @self.router.post(f"/{self.name}/{{item_id}}/deploy", response_class=HTMLResponse)
+        async def deploy(request: Request, item_id: int, db: Session = Depends(get_db)):
+            # 1. Update the database record
+            item = db.query(model).filter(model.id == item_id).first()
+            if not item:
+                return HTMLResponse("Not found", status_code=404)
+            item.status = "deploying"
+            item.deploy_progress = 0
+            db.commit()
+
+            # 2. Initialize in-memory progress tracking
+            view.deploy_progress[item_id] = {
+                "progress": 0,
+                "status": "deploying",
+                "started": time.time(),
+            }
+
+            # 3. Return the progress bar partial (starts auto-polling)
+            return templates.TemplateResponse("partials/progress_bar.html", {
+                "request": request,
+                "edge_id": item_id,
+                "progress": 0,
+                "status": "Starting...",
+                "colspan": view.get_colspan(),  # Spans all table columns
+            })
+```
+
+### Step 4: Create the progress polling endpoint
+
+This endpoint is called automatically by HTMX every 500ms. It increments the progress, and when done, updates the database and marks the operation complete.
+
+```python
+        @self.router.get(f"/{self.name}/{{item_id}}/progress", response_class=HTMLResponse)
+        async def progress(request: Request, item_id: int, db: Session = Depends(get_db)):
+            state = view.deploy_progress.get(item_id, {"progress": 0, "status": "unknown"})
+
+            # Increment progress (replace with your real logic)
+            if state["progress"] < 100:
+                state["progress"] = min(100, state["progress"] + random.randint(5, 15))
+                view.deploy_progress[item_id] = state
+
+            # When complete, update the database
+            if state["progress"] >= 100:
+                item = db.query(model).filter(model.id == item_id).first()
+                if item:
+                    item.status = "online"
+                    item.deploy_progress = 100
+                    db.commit()
+                state["status"] = "Complete"
+
+            return templates.TemplateResponse("partials/progress_bar.html", {
+                "request": request,
+                "edge_id": item_id,
+                "progress": state["progress"],
+                "status": state.get("status", "deploying"),
+                "colspan": view.get_colspan(),
+            })
+```
+
+### How the template works
+
+The `partials/progress_bar.html` template renders a `<tr>` element with a Bootstrap progress bar inside. Here's what makes it tick:
+
+```html
+<tr class="progress-row" id="progress-{{ edge_id }}"
+    {% if progress < 100 %}
+    hx-get="/edges/{{ edge_id }}/progress"
+    hx-trigger="every 500ms"
+    hx-swap="outerHTML"
+    {% endif %}>
+    <td colspan="{{ colspan | default(8) }}">
+        <!-- Progress bar with animated stripes while in progress -->
+        <div class="progress" style="height: 20px;">
+            <div class="progress-bar progress-bar-striped
+                 {% if progress < 100 %}progress-bar-animated{% endif %}
+                 {% if progress >= 100 %}bg-success{% endif %}"
+                 style="width: {{ progress }}%">
+                {{ progress }}%
+            </div>
+        </div>
+        <!-- Status badge: "deploying" while running, "Complete" when done -->
+        <span class="badge {% if progress >= 100 %}bg-success{% else %}bg-primary{% endif %}">
+            {% if progress >= 100 %}Complete{% else %}{{ status }}{% endif %}
+        </span>
+    </td>
+</tr>
+```
+
+Key details:
+- **`hx-get` + `hx-trigger="every 500ms"`** -- HTMX polls the progress endpoint twice per second
+- **`hx-swap="outerHTML"`** -- each poll response replaces the entire `<tr>`, updating the progress bar
+- **`{% if progress < 100 %}`** -- when progress reaches 100%, the `hx-get` and `hx-trigger` attributes are omitted, which **stops polling automatically**
+- **`progress-bar-animated`** -- Bootstrap's animated striped effect while in progress, removed on completion
+- **`bg-success`** -- the bar turns green when complete
+- **`colspan`** -- spans all table columns so the progress bar stretches across the full row width
+
+### Template variables
+
+| Variable | Type | Description |
+|---|---|---|
+| `edge_id` | `int` | The item's primary key (used in the polling URL and element ID) |
+| `progress` | `int` | Current progress percentage (0-100) |
+| `status` | `str` | Status text shown in the badge (e.g. "deploying", "Complete") |
+| `colspan` | `int` | Number of table columns to span (use `view.get_colspan()`) |
+
+### Optional: Reset / cleanup
+
+Add a reset endpoint to cancel or clean up after a deployment:
+
+```python
+        @self.router.post(f"/{self.name}/{{item_id}}/reset", response_class=HTMLResponse)
+        async def reset(request: Request, item_id: int, db: Session = Depends(get_db)):
+            item = db.query(model).filter(model.id == item_id).first()
+            if not item:
+                return HTMLResponse("Not found", status_code=404)
+            item.status = "pending"
+            item.deploy_progress = 0
+            db.commit()
+            # Remove from in-memory tracking
+            view.deploy_progress.pop(item_id, None)
+            # Redirect to refresh the list page
+            return HTMLResponse("", headers={"HX-Redirect": f"/{view.name}"})
+```
+
+### Using the progress bar in a wizard
+
+The progress bar can also be used outside list tables. In the demo's deploy wizard, step 4 triggers a deployment and shows progress inline:
+
+```python
+# In the wizard step handler, start deployment:
+edge_view = admin.get_view("edges")
+edge_view.deploy_progress[edge_id] = {
+    "progress": 0,
+    "status": "deploying",
+    "started": time.time(),
+}
+
+# Then poll a separate wizard-specific endpoint:
+@app.get("/wizard/deploy-status/{edge_id}", response_class=HTMLResponse)
+async def wizard_deploy_status(request: Request, edge_id: int, db: Session = Depends(get_db)):
+    state = admin.get_view("edges").deploy_progress.get(edge_id, {"progress": 0})
+
+    if state["progress"] < 100:
+        state["progress"] = min(100, state["progress"] + random.randint(3, 10))
+
+    if state["progress"] >= 100:
+        # Update DB and show completion UI
+        return HTMLResponse("""
+            <div class="text-center">
+                <i class="bi bi-check-circle-fill text-success" style="font-size: 3rem;"></i>
+                <h5 class="mt-2 text-success">Deployment Complete!</h5>
+            </div>
+        """)
+
+    # Show inline progress (polled via hx-get + hx-trigger="every 1s")
+    return HTMLResponse(f"""
+        <div hx-get="/wizard/deploy-status/{edge_id}" hx-trigger="every 1s" hx-swap="outerHTML">
+            <div class="progress" style="height: 20px;">
+                <div class="progress-bar progress-bar-striped progress-bar-animated"
+                     style="width: {state['progress']}%">{state['progress']}%</div>
+            </div>
+        </div>
+    """)
+```
+
+### Replacing simulated progress with real logic
+
+The demo uses `random.randint(5, 15)` to simulate progress. In a real application, replace this with actual task tracking:
+
+```python
+# Example: Track a background task
+import asyncio
+
+async def real_deploy(item_id: int, view: EdgeView):
+    """Run the actual deployment steps and update progress."""
+    steps = ["Uploading config", "Applying policies", "Verifying connectivity"]
+    for i, step in enumerate(steps):
+        await do_deployment_step(item_id, step)  # Your real logic
+        progress = int((i + 1) / len(steps) * 100)
+        view.deploy_progress[item_id] = {"progress": progress, "status": step}
+
+# In the deploy endpoint, kick off the background task:
+@self.router.post(f"/{self.name}/{{item_id}}/deploy", response_class=HTMLResponse)
+async def deploy(request: Request, item_id: int, db: Session = Depends(get_db)):
+    view.deploy_progress[item_id] = {"progress": 0, "status": "Starting..."}
+    asyncio.create_task(real_deploy(item_id, view))  # Runs in background
+    return templates.TemplateResponse("partials/progress_bar.html", {
+        "request": request,
+        "edge_id": item_id,
+        "progress": 0,
+        "status": "Starting...",
+        "colspan": view.get_colspan(),
+    })
+```
+
+The polling endpoint then just reads the current state -- no need to increment it since the background task handles that.
 
 ---
 
