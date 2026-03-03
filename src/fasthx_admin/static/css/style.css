@@ -186,7 +186,7 @@ body {
 
 .sidebar {
     width: var(--sidebar-width);
-    min-height: 100vh;
+    height: 100vh;
     background: #303030;
     position: fixed;
     top: 0;
@@ -624,6 +624,49 @@ body {
 .btn-group-sm .btn {
     padding: 0.2rem 0.4rem;
     font-size: 0.75rem;
+}
+
+.row-actions-dropdown .dropdown-toggle {
+    padding: 0.2rem 0.5rem;
+    font-size: 0.8rem;
+    line-height: 1;
+}
+
+.row-actions-dropdown .dropdown-toggle::after {
+    display: none;
+}
+
+.row-actions-dropdown .dropdown-menu {
+    min-width: 10rem;
+    font-size: 0.85rem;
+    background-color: var(--bg-surface);
+    border-color: var(--border);
+    box-shadow: 0 4px 12px var(--shadow);
+}
+
+.row-actions-dropdown .dropdown-item {
+    color: var(--text);
+    padding: 0.4rem 0.75rem;
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+}
+
+.row-actions-dropdown .dropdown-item:hover {
+    background-color: var(--bg-elevated);
+    color: var(--text);
+}
+
+.row-actions-dropdown .dropdown-item.text-danger {
+    color: var(--danger) !important;
+}
+
+.row-actions-dropdown .dropdown-item.text-danger:hover {
+    background-color: var(--badge-danger-bg);
+}
+
+.row-actions-dropdown .dropdown-divider {
+    border-color: var(--border);
 }
 
 /* ---- Code ---- */
