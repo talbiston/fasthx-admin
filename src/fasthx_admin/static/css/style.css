@@ -193,8 +193,10 @@ body {
     left: 0;
     z-index: 1000;
     transition: transform 0.3s ease;
-    overflow-y: auto;
+    overflow: hidden;
     border-right: 1px solid #404040;
+    display: flex;
+    flex-direction: column;
 }
 
 .main-content {
@@ -229,6 +231,7 @@ body {
 .sidebar-header {
     padding: 1rem 1.25rem;
     border-bottom: 1px solid #404040;
+    flex-shrink: 0;
 }
 
 .sidebar-brand {
@@ -254,6 +257,8 @@ body {
     list-style: none;
     padding: 0.5rem 0;
     margin: 0;
+    flex: 1;
+    overflow-y: auto;
 }
 
 .sidebar-category {
@@ -848,14 +853,14 @@ code {
 }
 
 /* Keep sidebar scrollbar dark in both themes */
-.sidebar::-webkit-scrollbar-track {
+.sidebar-nav::-webkit-scrollbar-track {
     background: #303030;
 }
 
-.sidebar::-webkit-scrollbar-thumb {
+.sidebar-nav::-webkit-scrollbar-thumb {
     background: #404040;
 }
 
-.sidebar::-webkit-scrollbar-thumb:hover {
+.sidebar-nav::-webkit-scrollbar-thumb:hover {
     background: #6b7280;
 }
