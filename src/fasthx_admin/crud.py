@@ -525,6 +525,7 @@ class Admin:
         self.public_pages = public_pages if public_pages is not None else {"login.html"}
         self.views: list[CRUDView] = []
         self._view_map: dict[str, CRUDView] = {}
+        self._custom_links: list[dict] = []
 
         # Set up Jinja2 templates (use built-in if not provided)
         if templates is not None:
@@ -579,10 +580,35 @@ class Admin:
         """Look up a registered view by name."""
         return self._view_map.get(name)
 
+    def add_link(
+        self,
+        name: str,
+        url: str,
+        display_name: str,
+        icon: str = "link",
+        category: str = "Other",
+    ):
+        """Add a custom navigation link to the sidebar."""
+        self._custom_links.append({
+            "name": name,
+            "url": url,
+            "display_name": display_name,
+            "icon": icon,
+            "category": category,
+        })
+
     def get_nav_categories(self) -> dict:
         """Build sidebar navigation from all registered views."""
         categories = defaultdict(list)
         for view in self.views:
             cat = view.category or "Other"
             categories[cat].append(view.get_nav_info())
+        for link in self._custom_links:
+            cat = link.get("category", "Other")
+            categories[cat].append({
+                "name": link["name"],
+                "url": link["url"],
+                "display_name": link["display_name"],
+                "icon": link["icon"],
+            })
         return dict(categories)

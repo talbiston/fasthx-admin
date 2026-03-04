@@ -4,11 +4,11 @@ build-backend = "hatchling.build"
 
 [project]
 name = "fasthx-admin"
-version = "0.1.4"
+version = "0.1.5"
 description = "FastAPI + HTMX + Jinja2 admin interface framework — a modern replacement for Flask-Admin"
 readme = "README.md"
 license = "MIT"
-requires-python = ">=3.10"
+requires-python = ">=3.9"
 authors = [
     { name = "talbiston" },
 ]
@@ -19,6 +19,7 @@ classifiers = [
     "Intended Audience :: Developers",
     "License :: OSI Approved :: MIT License",
     "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.9",
     "Programming Language :: Python :: 3.10",
     "Programming Language :: Python :: 3.11",
     "Programming Language :: Python :: 3.12",
