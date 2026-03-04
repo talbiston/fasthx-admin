@@ -75,6 +75,7 @@ class CRUDView:
     form_widget_overrides = None
     row_actions = None
     page_size = 20
+    pk_field = "id"
     can_create = True
     can_edit = True
     can_delete = True
@@ -130,7 +131,7 @@ class CRUDView:
         if not self.form_columns:
             self.form_columns = [
                 c for c in all_columns
-                if c != "id" and c != "deploy_progress"
+                if c != self.pk_field and c != "deploy_progress"
             ]
 
         # Build column metadata for templates
@@ -194,7 +195,7 @@ class CRUDView:
         target_model = _model_registry.get(target_table.name)
         if target_model:
             items = db.query(target_model).all()
-            return [(item.id, str(item)) for item in items]
+            return [(getattr(item, 'id', str(item)), str(item)) for item in items]
         return []
 
     def _build_query(self, db: Session, search: str = "", sort: str = "", order: str = "asc"):
@@ -219,7 +220,7 @@ class CRUDView:
                 col = getattr(self.model, sort)
                 query = query.order_by(col.desc() if order == "desc" else col.asc())
         else:
-            query = query.order_by(self.model.id.desc())
+            query = query.order_by(getattr(self.model, self.pk_field).desc())
 
         return query
 
@@ -241,8 +242,8 @@ class CRUDView:
             url = config["url"].replace("{id}", "{item_id}")
 
             def make_handler(fk):
-                async def handler(request: Request, item_id: int, db: Session = Depends(get_db)):
-                    item = db.query(model).filter(model.id == item_id).first()
+                async def handler(request: Request, item_id, db: Session = Depends(get_db)):
+                    item = db.query(model).filter(getattr(model, view.pk_field) == item_id).first()
                     if not item:
                         return HTMLResponse("")
                     value = getattr(item, fk)
@@ -287,7 +288,7 @@ class CRUDView:
 
             rows = []
             for item in items:
-                row = {"_obj": item, "_id": item.id, "cells": {}}
+                row = {"_obj": item, "_id": getattr(item, view.pk_field), "cells": {}}
                 for col_meta in view.columns_meta:
                     key = col_meta["key"]
                     value = getattr(item, key)
@@ -356,10 +357,10 @@ class CRUDView:
         @self.router.get(f"/{self.name}/{{item_id}}", response_class=HTMLResponse)
         async def detail_view(
             request: Request,
-            item_id: int,
+            item_id,
             db: Session = Depends(get_db),
         ):
-            item = db.query(model).filter(model.id == item_id).first()
+            item = db.query(model).filter(getattr(model, view.pk_field) == item_id).first()
             if not item:
                 return HTMLResponse("Not found", status_code=404)
 
@@ -387,13 +388,13 @@ class CRUDView:
         @self.router.get(f"/{self.name}/{{item_id}}/edit", response_class=HTMLResponse)
         async def edit_form(
             request: Request,
-            item_id: int,
+            item_id,
             db: Session = Depends(get_db),
         ):
             if not view.can_edit:
                 return HTMLResponse("Edit not allowed", status_code=403)
 
-            item = db.query(model).filter(model.id == item_id).first()
+            item = db.query(model).filter(getattr(model, view.pk_field) == item_id).first()
             if not item:
                 return HTMLResponse("Not found", status_code=404)
 
@@ -412,10 +413,10 @@ class CRUDView:
         @self.router.post(f"/{self.name}/{{item_id}}/edit", response_class=HTMLResponse)
         async def edit_submit(
             request: Request,
-            item_id: int,
+            item_id,
             db: Session = Depends(get_db),
         ):
-            item = db.query(model).filter(model.id == item_id).first()
+            item = db.query(model).filter(getattr(model, view.pk_field) == item_id).first()
             if not item:
                 return HTMLResponse("Not found", status_code=404)
 
@@ -427,13 +428,13 @@ class CRUDView:
         @self.router.post(f"/{self.name}/{{item_id}}/delete", response_class=HTMLResponse)
         async def delete_item(
             request: Request,
-            item_id: int,
+            item_id,
             db: Session = Depends(get_db),
         ):
             if not view.can_delete:
                 return HTMLResponse("Delete not allowed", status_code=403)
 
-            item = db.query(model).filter(model.id == item_id).first()
+            item = db.query(model).filter(getattr(model, view.pk_field) == item_id).first()
             if item:
                 db.delete(item)
                 db.commit()
