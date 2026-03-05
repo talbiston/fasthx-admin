@@ -80,6 +80,9 @@ class CRUDView:
     can_edit = True
     can_delete = True
     htmx_columns = None
+    list_template = "list.html"
+    create_template = "form.html"
+    edit_template = "form.html"
 
     def __init__(self, templates):
         model = self.model
@@ -320,7 +323,7 @@ class CRUDView:
             if request.headers.get("HX-Request") and request.query_params.get("partial"):
                 return templates.TemplateResponse("partials/table_body.html", context)
 
-            return templates.TemplateResponse("list.html", context)
+            return templates.TemplateResponse(view.list_template, context)
 
         @self.router.get(f"/{self.name}/create", response_class=HTMLResponse)
         async def create_form(
@@ -332,7 +335,7 @@ class CRUDView:
 
             form_fields = view._prepare_form_fields(db)
 
-            return templates.TemplateResponse("form.html", {
+            return templates.TemplateResponse(view.create_template, {
                 "request": request,
                 "view": view,
                 "form_fields": form_fields,
@@ -400,7 +403,7 @@ class CRUDView:
 
             form_fields = view._prepare_form_fields(db, item)
 
-            return templates.TemplateResponse("form.html", {
+            return templates.TemplateResponse(view.edit_template, {
                 "request": request,
                 "view": view,
                 "form_fields": form_fields,
@@ -520,6 +523,7 @@ class Admin:
         mount_statics: bool = True,
         public_pages: set[str] | None = None,
         ai_chat: bool = False,
+        extra_templates_dirs: list[str] | None = None,
     ):
         self.app = app
         self.title = title
@@ -534,8 +538,15 @@ class Admin:
         if templates is not None:
             self.templates = templates
         else:
-            templates_dir = _PACKAGE_DIR / "templates"
-            self.templates = Jinja2Templates(directory=str(templates_dir))
+            builtin_dir = str(_PACKAGE_DIR / "templates")
+            self.templates = Jinja2Templates(directory=builtin_dir)
+
+        # Add extra template search directories (app-level custom templates)
+        if extra_templates_dirs:
+            from jinja2 import FileSystemLoader
+            loader = self.templates.env.loader
+            existing = loader.searchpath if hasattr(loader, 'searchpath') else [loader.searchpath]
+            self.templates.env.loader = FileSystemLoader(existing + list(extra_templates_dirs))
 
         # Mount built-in static files
         if mount_statics:
