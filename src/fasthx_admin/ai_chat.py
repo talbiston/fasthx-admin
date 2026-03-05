@@ -479,7 +479,7 @@ def create_ai_chat_router(admin) -> APIRouter:
         try:
             result = await handler.chat(
                 message, history, system_prompt,
-                enabled_tools=enabled_tools or None,
+                enabled_tools=enabled_tools,
                 db=db,
             )
         except Exception as e:

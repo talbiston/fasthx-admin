@@ -32,8 +32,8 @@
 
 /* Chat panel */
 .ai-chat-panel {
-    width: 380px;
-    height: 500px;
+    width: 500px;
+    height: 600px;
     border-radius: 12px;
     overflow: hidden;
     display: flex;
@@ -42,10 +42,15 @@
     background: var(--bs-body-bg);
     border: 1px solid var(--bs-border-color);
     resize: both;
-    min-width: 300px;
-    min-height: 350px;
+    direction: rtl;
+    min-width: 320px;
+    min-height: 400px;
     max-width: 90vw;
-    max-height: 80vh;
+    max-height: 85vh;
+}
+
+.ai-chat-panel > * {
+    direction: ltr;
 }
 
 /* Header */
