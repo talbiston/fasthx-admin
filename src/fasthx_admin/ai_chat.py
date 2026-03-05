@@ -396,7 +396,8 @@ def _invalidate_settings_cache():
 def is_chat_widget_enabled() -> bool:
     """Check if the AI chat widget is enabled in DB settings (uses cache)."""
     global _settings_cache, _settings_cache_time
-    if not _settings_cache:
+    now = time.time()
+    if now - _settings_cache_time > _CACHE_TTL or not _settings_cache:
         try:
             db = next(get_db())
             try:
