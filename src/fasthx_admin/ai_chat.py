@@ -69,6 +69,7 @@ class OpenAICompatibleProvider(AIProvider):
         temperature: float = 0.7,
         max_tokens: int = 2048,
         timeout: float = 60.0,
+        ssl_verify: bool = True,
     ):
         self.base_url = base_url.rstrip("/")
         self.api_key = api_key
@@ -76,6 +77,7 @@ class OpenAICompatibleProvider(AIProvider):
         self.temperature = temperature
         self.max_tokens = max_tokens
         self.timeout = timeout
+        self.ssl_verify = ssl_verify
 
     async def chat(
         self, messages: list[dict], tools: list[dict] | None = None, **kwargs
@@ -101,7 +103,7 @@ class OpenAICompatibleProvider(AIProvider):
         if tools:
             payload["tools"] = tools
 
-        async with httpx.AsyncClient(timeout=self.timeout) as client:
+        async with httpx.AsyncClient(timeout=self.timeout, verify=self.ssl_verify) as client:
             resp = await client.post(url, json=payload, headers=headers)
             resp.raise_for_status()
             data = resp.json()
@@ -123,6 +125,7 @@ class OpenAICompatibleProvider(AIProvider):
             {"key": "temperature", "label": "Temperature", "type": "number", "default": "0.7", "step": "0.1", "min": "0", "max": "2"},
             {"key": "max_tokens", "label": "Max Tokens", "type": "number", "default": "2048"},
             {"key": "timeout", "label": "Timeout (seconds)", "type": "number", "default": "60"},
+            {"key": "ssl_verify", "label": "Verify SSL", "type": "checkbox", "default": "true"},
         ]
 
 
@@ -390,6 +393,22 @@ def _invalidate_settings_cache():
     _settings_cache_time = 0
 
 
+def is_chat_widget_enabled() -> bool:
+    """Check if the AI chat widget is enabled in DB settings (uses cache)."""
+    global _settings_cache, _settings_cache_time
+    if not _settings_cache:
+        try:
+            db = next(get_db())
+            try:
+                _settings_cache = _get_settings(db)
+                _settings_cache_time = time.time()
+            finally:
+                db.close()
+        except Exception:
+            return False
+    return _settings_cache.get("enabled") == "true"
+
+
 # ---------------------------------------------------------------------------
 # Router Factory
 # ---------------------------------------------------------------------------
@@ -420,6 +439,7 @@ def _build_provider(settings: dict[str, str]) -> AIProvider:
         temperature=float(settings.get("temperature", "0.7")),
         max_tokens=int(settings.get("max_tokens", "2048")),
         timeout=float(settings.get("timeout", "60")),
+        ssl_verify=settings.get("ssl_verify", "true") == "true",
     )
 
 
@@ -506,10 +526,11 @@ def create_ai_chat_router(admin) -> APIRouter:
     async def save_settings(request: Request, db: Session = Depends(get_db)):
         form = await request.form()
         settings_to_save = {}
+        checkbox_keys = {"enabled", "ssl_verify"}
         for key in ["enabled", "base_url", "api_key", "model", "temperature",
-                     "max_tokens", "timeout", "system_prompt"]:
+                     "max_tokens", "timeout", "ssl_verify", "system_prompt"]:
             value = form.get(key, "")
-            if key == "enabled":
+            if key in checkbox_keys:
                 value = "true" if value else "false"
             settings_to_save[key] = str(value)
 

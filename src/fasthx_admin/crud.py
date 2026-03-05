@@ -582,7 +582,11 @@ class Admin:
             context.setdefault("active_page", "")
             context.setdefault("static_url", admin.static_url)
             context.setdefault("admin_title", admin.title)
-            context.setdefault("ai_chat_enabled", admin.ai_chat_enabled)
+            if admin.ai_chat_enabled:
+                from .ai_chat import is_chat_widget_enabled
+                context.setdefault("ai_chat_enabled", is_chat_widget_enabled())
+            else:
+                context.setdefault("ai_chat_enabled", False)
             return _original(name, context, **kwargs)
 
         self.templates.TemplateResponse = _patched
