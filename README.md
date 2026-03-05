@@ -25,6 +25,14 @@ A modern admin interface framework for FastAPI built with HTMX, Jinja2, and Boot
 - [Dependent Dropdowns](#dependent-dropdowns)
 - [Progress Bar](#progress-bar)
 - [Authentication](#authentication)
+- [AI Chat (Optional)](#ai-chat-optional)
+  - [Enabling AI Chat](#enabling-ai-chat)
+  - [Installing the AI Dependency](#installing-the-ai-dependency)
+  - [Registering Tools](#registering-tools)
+  - [Configuring via the Settings UI](#configuring-via-the-settings-ui)
+  - [How It Works](#how-it-works)
+  - [Custom Providers](#custom-providers)
+  - [AI Chat API Endpoints](#ai-chat-api-endpoints)
 - [Custom Pages (Dashboard, Wizard, etc.)](#custom-pages-dashboard-wizard-etc)
 - [Templates](#templates)
 - [Theming](#theming)
@@ -50,6 +58,7 @@ A modern admin interface framework for FastAPI built with HTMX, Jinja2, and Boot
 - **Foreign key dropdowns** -- auto-populated from related models
 - **Pagination** -- configurable page size with prev/next navigation
 - **Built-in templates** -- 7 page templates + 8 partials, all customizable
+- **AI chat widget (optional)** -- pluggable LLM-powered assistant with tool calling, settings UI, and OpenAI-compatible provider
 
 ---
 
@@ -57,6 +66,12 @@ A modern admin interface framework for FastAPI built with HTMX, Jinja2, and Boot
 
 ```bash
 pip install fasthx-admin
+```
+
+With AI chat support (adds `httpx`):
+
+```bash
+pip install fasthx-admin[ai]
 ```
 
 With development extras (uvicorn, pytest, httpx):
@@ -254,6 +269,7 @@ admin = Admin(
 | `static_url` | `str` | `"/static/fasthx-admin"` | URL path where static assets are mounted |
 | `mount_statics` | `bool` | `True` | Whether to auto-mount built-in CSS/JS |
 | `public_pages` | `set[str]` | `{"login.html"}` | Template names that don't require authentication |
+| `ai_chat` | `bool` | `False` | Enable the AI chat widget and settings pages (requires `fasthx-admin[ai]`) |
 
 ### Methods
 
@@ -969,6 +985,160 @@ ALLOWED_GROUPS.extend(["/my-admin-group", "/superusers"])
 
 ---
 
+## AI Chat (Optional)
+
+fasthx-admin ships with an optional AI chat widget that adds a floating assistant to every page. It supports any OpenAI-compatible API (OpenAI, vLLM, Ollama, LiteLLM, etc.), a decorator-based tool registry so the AI can call your Python functions, and a settings UI stored in the database.
+
+### Enabling AI Chat
+
+Pass `ai_chat=True` when creating the Admin instance:
+
+```python
+from fasthx_admin import Admin
+
+admin = Admin(app, title="My Admin", ai_chat=True)
+```
+
+This automatically:
+- Creates a `fasthx_admin_ai_settings` table in your database
+- Mounts chat API endpoints under `/ai/`
+- Adds "AI Settings" and "AI Context & Tools" links in the sidebar under a "Settings" category
+- Includes the chat widget on every page (once enabled in settings)
+
+### Installing the AI Dependency
+
+The AI chat uses `httpx` for async HTTP calls to the LLM API. Install it via the `ai` extra:
+
+```bash
+pip install fasthx-admin[ai]
+```
+
+If you already have `httpx` installed (e.g. from the `dev` extra), no additional install is needed.
+
+### Registering Tools
+
+Tools let the AI call your Python functions to answer questions with live data. Use the `@tool_registry.tool()` decorator:
+
+```python
+from fasthx_admin import tool_registry
+
+@tool_registry.tool(description="Get the total number of customers")
+def customer_count(db=None):
+    """Returns the total number of customers."""
+    count = db.query(Customer).count()
+    return f"There are {count} customers."
+
+@tool_registry.tool(description="Look up a customer by name")
+def find_customer(name: str, db=None):
+    """Find a customer by name (partial match)."""
+    results = db.query(Customer).filter(Customer.name.ilike(f"%{name}%")).all()
+    if not results:
+        return f"No customers found matching '{name}'."
+    return "\n".join(f"- {c.name} (SID: {c.sid})" for c in results)
+
+@tool_registry.tool(description="Get edge device statistics")
+async def edge_stats(db=None):
+    """Returns edge device status breakdown."""
+    total = db.query(FortiEdge).count()
+    return f"Total edges: {total}"
+```
+
+Key points:
+- **`db` parameter** -- if your function accepts a `db` parameter, it automatically receives the current SQLAlchemy session
+- **Async support** -- tools can be `async def` or regular `def`
+- **Type hints** -- parameter types (str, int, float, bool) are extracted and sent to the AI in OpenAI function-calling format
+- **Return a string** -- the return value is sent back to the AI as the tool result
+- Tools must be **enabled** in the settings UI before the AI can use them
+
+### Configuring via the Settings UI
+
+After enabling `ai_chat=True`, navigate to **Settings > AI Settings** in the sidebar. The settings page has four sections:
+
+| Section | Fields | Description |
+|---|---|---|
+| **General** | Enable/disable toggle | Master switch for the chat widget |
+| **Connection** | Base URL, API key, model | Your LLM endpoint (e.g. `https://api.openai.com`, `http://localhost:11434`) |
+| **Parameters** | Temperature, max tokens, timeout | Generation parameters |
+| **System Prompt** | Large text area | Base instructions for the AI |
+
+The **Context & Tools** page (linked from the settings page) lets you:
+- Add **context items** -- named text segments injected into the system prompt (e.g. business rules, schema descriptions)
+- Toggle context items on/off
+- Enable/disable registered **tools** individually
+
+All settings are stored in the `fasthx_admin_ai_settings` database table as key-value pairs.
+
+### How It Works
+
+```
+User types message in chat widget
+    → POST /ai/chat {message: "..."}
+    → Load settings from DB (cached 30s)
+    → Build system prompt (base + enabled context items)
+    → Load session history (in-memory, keyed by cookie)
+    → Call LLM provider with messages + enabled tools
+    → If AI requests tool calls:
+        → Execute tools via registry (with DB session)
+        → Send tool results back to AI
+        → Get final response
+    → Save to session history (max 50 messages)
+    → Return {response, tool_calls_made}
+```
+
+- **Session history** is stored in-memory on the server, keyed by a `fasthx_chat_sid` cookie
+- History persists across page navigations but resets on server restart
+- The chat widget renders markdown responses using `marked.js` + `DOMPurify` (loaded from CDN)
+- Widget size and expanded/minimized state persist in `localStorage`
+
+### Custom Providers
+
+The built-in `OpenAICompatibleProvider` works with any API that speaks the OpenAI chat completions format. To integrate a different API, subclass `AIProvider`:
+
+```python
+from fasthx_admin import AIProvider
+
+class MyCustomProvider(AIProvider):
+    name = "my_provider"
+
+    async def chat(self, messages, tools=None, **kwargs):
+        # Call your LLM API here
+        # Must return: {"response": str, "tool_calls": list | None}
+        ...
+
+    def get_config_fields(self):
+        # Return list of settings fields for the UI
+        return [
+            {"key": "api_key", "label": "API Key", "type": "password", "default": ""},
+        ]
+```
+
+### AI Chat API Endpoints
+
+All endpoints are mounted under `/ai/`:
+
+| Method | Path | Description |
+|---|---|---|
+| `POST` | `/ai/chat` | Send a message, get AI response (JSON) |
+| `POST` | `/ai/clear` | Clear the current session's chat history |
+| `GET` | `/ai/history` | Get the current session's message history (JSON) |
+| `GET` | `/ai/settings` | AI settings page (HTML) |
+| `POST` | `/ai/settings` | Save AI settings |
+| `GET` | `/ai/settings/context` | Context & tools settings page (HTML) |
+| `POST` | `/ai/settings/context` | Save context items and tool toggles |
+
+The `POST /ai/chat` endpoint expects JSON `{"message": "..."}` and returns:
+
+```json
+{
+    "response": "The AI's markdown response",
+    "tool_calls": [
+        {"name": "customer_count", "arguments": {}, "result": "There are 4 customers."}
+    ]
+}
+```
+
+---
+
 ## Custom Pages (Dashboard, Wizard, etc.)
 
 The auto-generated CRUD views handle model pages. For custom pages like dashboards, wizards, or tools, add standard FastAPI routes and use `admin.templates` for rendering.
@@ -1174,5 +1344,6 @@ The demo includes:
 | CSS | [Bootstrap 5.3](https://getbootstrap.com/) (CDN) |
 | Icons | [Bootstrap Icons](https://icons.getbootstrap.com/) (CDN) |
 | Auth | OIDC / Keycloak (via [requests](https://requests.readthedocs.io/)) |
+| AI Chat | [httpx](https://www.python-httpx.org/) (optional `[ai]` extra) + [marked.js](https://marked.js.org/) / [DOMPurify](https://github.com/cure53/DOMPurify) (CDN) |
 | Server | [Uvicorn](https://www.uvicorn.org/) (dev dependency) |
-| JavaScript | Minimal -- theme toggle + HTMX event hooks only |
+| JavaScript | Minimal -- theme toggle + HTMX event hooks + AI chat widget |

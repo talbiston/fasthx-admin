@@ -519,6 +519,7 @@ class Admin:
         static_url: str = "/static/fasthx-admin",
         mount_statics: bool = True,
         public_pages: set[str] | None = None,
+        ai_chat: bool = False,
     ):
         self.app = app
         self.title = title
@@ -527,6 +528,7 @@ class Admin:
         self.views: list[CRUDView] = []
         self._view_map: dict[str, CRUDView] = {}
         self._custom_links: list[dict] = []
+        self.ai_chat_enabled = ai_chat
 
         # Set up Jinja2 templates (use built-in if not provided)
         if templates is not None:
@@ -547,6 +549,21 @@ class Admin:
         # Wrap TemplateResponse to inject nav context + auth check
         self._wrap_template_response()
 
+        # Set up AI chat if enabled
+        if ai_chat:
+            from .ai_chat import create_ai_chat_router, ensure_ai_tables
+            ensure_ai_tables()
+            router = create_ai_chat_router(self)
+            app.include_router(router)
+            self.add_link(
+                "ai_settings", "/ai/settings", "AI Settings",
+                icon="robot", category="Settings",
+            )
+            self.add_link(
+                "ai_context_settings", "/ai/settings/context", "AI Context & Tools",
+                icon="puzzle", category="Settings",
+            )
+
     def _wrap_template_response(self):
         """Monkey-patch TemplateResponse to inject nav categories and auth."""
         _original = self.templates.TemplateResponse
@@ -565,6 +582,7 @@ class Admin:
             context.setdefault("active_page", "")
             context.setdefault("static_url", admin.static_url)
             context.setdefault("admin_title", admin.title)
+            context.setdefault("ai_chat_enabled", admin.ai_chat_enabled)
             return _original(name, context, **kwargs)
 
         self.templates.TemplateResponse = _patched

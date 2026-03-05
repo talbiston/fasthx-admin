@@ -21,7 +21,7 @@ from fastapi.responses import HTMLResponse, RedirectResponse
 from sqlalchemy.orm import Session
 from starlette.middleware.sessions import SessionMiddleware
 
-from fasthx_admin import Admin, CRUDView, Base, init_db, get_db, get_current_user, oidc_login, AuthError
+from fasthx_admin import Admin, CRUDView, Base, init_db, get_db, get_current_user, oidc_login, AuthError, tool_registry
 
 from models import Customer, Orchestrator, FortiEdge, BuildStatus, EdgeStatus
 
@@ -48,7 +48,38 @@ app.add_middleware(SessionMiddleware, secret_key=SECRET_KEY)
 
 # --- Admin setup ---
 
-admin = Admin(app, title="Admin Demo")
+admin = Admin(app, title="Admin Demo", ai_chat=True)
+
+
+# --- AI Chat Tools ---
+
+
+@tool_registry.tool(description="Get the total number of customers")
+def customer_count(db=None):
+    """Returns the total number of customers."""
+    count = db.query(Customer).count()
+    return f"There are {count} customers."
+
+
+@tool_registry.tool(description="Look up a customer by name")
+def find_customer(name: str, db=None):
+    """Find a customer by name (partial match)."""
+    results = db.query(Customer).filter(Customer.name.ilike(f"%{name}%")).all()
+    if not results:
+        return f"No customers found matching '{name}'."
+    return "\n".join(f"- {c.name} (SID: {c.sid}, ADOM: {c.adom})" for c in results)
+
+
+@tool_registry.tool(description="Get edge device statistics")
+def edge_stats(db=None):
+    """Returns edge device status breakdown."""
+    total = db.query(FortiEdge).count()
+    lines = [f"Total edges: {total}"]
+    for status in EdgeStatus:
+        count = db.query(FortiEdge).filter(FortiEdge.status == status).count()
+        if count > 0:
+            lines.append(f"  {status.value}: {count}")
+    return "\n".join(lines)
 
 
 # --- Seed data ---

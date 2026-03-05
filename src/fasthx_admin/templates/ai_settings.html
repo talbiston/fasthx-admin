@@ -1,0 +1,138 @@
+{% extends "base.html" %}
+
+{% block title %}AI Settings{% endblock %}
+{% block page_title %}AI Settings{% endblock %}
+
+{% block content %}
+<div class="container-fluid">
+    {% if save_success %}
+    <div class="alert alert-success alert-dismissible fade show" role="alert">
+        Settings saved successfully.
+        <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+    </div>
+    {% endif %}
+
+    <div class="d-flex justify-content-between align-items-center mb-3">
+        <div>
+            <a href="/ai/settings/context" class="btn btn-outline-secondary btn-sm">
+                <i class="bi bi-puzzle"></i> Context &amp; Tools
+            </a>
+        </div>
+    </div>
+
+    <form method="post" action="/ai/settings">
+        <div class="accordion" id="aiSettingsAccordion">
+            <!-- General -->
+            <div class="accordion-item">
+                <h2 class="accordion-header">
+                    <button class="accordion-button" type="button" data-bs-toggle="collapse" data-bs-target="#collapseGeneral">
+                        <i class="bi bi-gear me-2"></i> General
+                    </button>
+                </h2>
+                <div id="collapseGeneral" class="accordion-collapse collapse show" data-bs-parent="#aiSettingsAccordion">
+                    <div class="accordion-body">
+                        <div class="form-check form-switch mb-3">
+                            <input class="form-check-input" type="checkbox" id="enabled" name="enabled"
+                                   {% if settings.get('enabled') == 'true' %}checked{% endif %}>
+                            <label class="form-check-label" for="enabled">Enable AI Chat Widget</label>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Connection -->
+            <div class="accordion-item">
+                <h2 class="accordion-header">
+                    <button class="accordion-button collapsed" type="button" data-bs-toggle="collapse" data-bs-target="#collapseConnection">
+                        <i class="bi bi-plug me-2"></i> Connection
+                    </button>
+                </h2>
+                <div id="collapseConnection" class="accordion-collapse collapse" data-bs-parent="#aiSettingsAccordion">
+                    <div class="accordion-body">
+                        <div class="mb-3">
+                            <label for="base_url" class="form-label">API Base URL</label>
+                            <input type="text" class="form-control" id="base_url" name="base_url"
+                                   value="{{ settings.get('base_url', 'https://api.openai.com') }}"
+                                   placeholder="https://api.openai.com">
+                            <div class="form-text">OpenAI-compatible endpoint (OpenAI, vLLM, Ollama, LiteLLM, etc.)</div>
+                        </div>
+                        <div class="mb-3">
+                            <label for="api_key" class="form-label">API Key</label>
+                            <div class="input-group">
+                                <input type="password" class="form-control" id="api_key" name="api_key"
+                                       value="{% if settings.get('api_key') %}********{% endif %}"
+                                       placeholder="sk-...">
+                                <button class="btn btn-outline-secondary" type="button"
+                                        onclick="this.previousElementSibling.type = this.previousElementSibling.type === 'password' ? 'text' : 'password'">
+                                    <i class="bi bi-eye"></i>
+                                </button>
+                            </div>
+                        </div>
+                        <div class="mb-3">
+                            <label for="model" class="form-label">Model</label>
+                            <input type="text" class="form-control" id="model" name="model"
+                                   value="{{ settings.get('model', 'gpt-4o-mini') }}"
+                                   placeholder="gpt-4o-mini">
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Parameters -->
+            <div class="accordion-item">
+                <h2 class="accordion-header">
+                    <button class="accordion-button collapsed" type="button" data-bs-toggle="collapse" data-bs-target="#collapseParams">
+                        <i class="bi bi-sliders me-2"></i> Parameters
+                    </button>
+                </h2>
+                <div id="collapseParams" class="accordion-collapse collapse" data-bs-parent="#aiSettingsAccordion">
+                    <div class="accordion-body">
+                        <div class="row">
+                            <div class="col-md-4 mb-3">
+                                <label for="temperature" class="form-label">Temperature</label>
+                                <input type="number" class="form-control" id="temperature" name="temperature"
+                                       value="{{ settings.get('temperature', '0.7') }}"
+                                       step="0.1" min="0" max="2">
+                            </div>
+                            <div class="col-md-4 mb-3">
+                                <label for="max_tokens" class="form-label">Max Tokens</label>
+                                <input type="number" class="form-control" id="max_tokens" name="max_tokens"
+                                       value="{{ settings.get('max_tokens', '2048') }}">
+                            </div>
+                            <div class="col-md-4 mb-3">
+                                <label for="timeout" class="form-label">Timeout (seconds)</label>
+                                <input type="number" class="form-control" id="timeout" name="timeout"
+                                       value="{{ settings.get('timeout', '60') }}">
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- System Prompt -->
+            <div class="accordion-item">
+                <h2 class="accordion-header">
+                    <button class="accordion-button collapsed" type="button" data-bs-toggle="collapse" data-bs-target="#collapsePrompt">
+                        <i class="bi bi-chat-left-text me-2"></i> System Prompt
+                    </button>
+                </h2>
+                <div id="collapsePrompt" class="accordion-collapse collapse" data-bs-parent="#aiSettingsAccordion">
+                    <div class="accordion-body">
+                        <div class="mb-3">
+                            <textarea class="form-control" id="system_prompt" name="system_prompt"
+                                      rows="8" placeholder="You are a helpful admin assistant.">{{ settings.get('system_prompt', 'You are a helpful admin assistant.') }}</textarea>
+                            <div class="form-text">Base system prompt. Context items from the Context &amp; Tools page are appended automatically.</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="mt-3">
+            <button type="submit" class="btn btn-primary">
+                <i class="bi bi-check-lg me-1"></i> Save Settings
+            </button>
+        </div>
+    </form>
+</div>
+{% endblock %}
