@@ -8,6 +8,7 @@ This replaces Flask-Admin's ModelView with full control over rendering.
 from __future__ import annotations
 
 import functools
+import json
 import math
 from collections import defaultdict
 from inspect import Parameter, signature
@@ -41,6 +42,58 @@ COLUMN_TYPE_MAP = {
 
 # Global registry of model classes by table name, populated during CRUDView init
 _model_registry: Dict[str, Any] = {}
+
+
+class ValidationError(Exception):
+    """Raised from ``CRUDView.validate`` or ``_apply_form_data`` to abort a create/edit.
+
+    Usage::
+
+        class MyView(CRUDView):
+            model = MyModel
+
+            def validate(self, item, form_data, is_new):
+                if not form_data.get("hostname"):
+                    raise ValidationError("Hostname is required")
+                if not form_data.get("hostname").endswith(".local"):
+                    raise ValidationError("Hostname must end with .local")
+    """
+
+    def __init__(self, message: str):
+        self.message = message
+        super().__init__(message)
+
+
+def toast_response(
+    message: str,
+    type: str = "info",
+    title: str | None = None,
+    redirect: str | None = None,
+    status_code: int = 200,
+) -> HTMLResponse:
+    """Return an HTMLResponse that triggers a toast notification via HTMX.
+
+    Usage in a custom endpoint::
+
+        @CRUDView.endpoint("/{name}/{item_id}/deploy", methods=["POST"])
+        async def deploy(self, ...):
+            ...
+            return toast_response("Deployment started!", type="success", redirect=f"/{self.name}")
+
+    Args:
+        message: The toast message text.
+        type: One of "success", "danger", "warning", "info".
+        title: Optional title (defaults to capitalised type).
+        redirect: Optional URL — adds HX-Redirect header for page navigation after toast.
+        status_code: HTTP status code (default 200).
+    """
+    toast_data: Dict[str, Any] = {"message": message, "type": type}
+    if title:
+        toast_data["title"] = title
+    headers = {"HX-Trigger": json.dumps({"showToast": toast_data})}
+    if redirect:
+        headers["HX-Redirect"] = redirect
+    return HTMLResponse("", status_code=status_code, headers=headers)
 
 
 class CRUDView:
@@ -484,9 +537,27 @@ class CRUDView:
         ):
             form_data = await request.form()
             item = model()
-            view._apply_form_data(item, form_data)
-            db.add(item)
-            db.commit()
+            try:
+                view._apply_form_data(item, form_data)
+                view.validate(item, form_data, is_new=True)
+                db.add(item)
+                db.commit()
+            except ValidationError as e:
+                db.rollback()
+                form_fields = view._prepare_form_fields(db, item)
+                return templates.TemplateResponse(view.create_template, {
+                    "request": request,
+                    "view": view,
+                    "form_fields": form_fields,
+                    "form_sections": view.form_sections,
+                    "item": None,
+                    "action": f"/{view.name}/create",
+                    "title": f"Create {view.display_name}",
+                }, headers={
+                    "HX-Trigger": json.dumps({"showToast": {
+                        "message": e.message, "type": "danger", "title": "Validation Error",
+                    }}),
+                })
             return RedirectResponse(f"/{view.name}", status_code=303)
 
         @self.router.get(f"/{self.name}/{{item_id}}", response_class=HTMLResponse)
@@ -556,8 +627,26 @@ class CRUDView:
                 return HTMLResponse("Not found", status_code=404)
 
             form_data = await request.form()
-            view._apply_form_data(item, form_data)
-            db.commit()
+            try:
+                view._apply_form_data(item, form_data)
+                view.validate(item, form_data, is_new=False)
+                db.commit()
+            except ValidationError as e:
+                db.rollback()
+                form_fields = view._prepare_form_fields(db, item)
+                return templates.TemplateResponse(view.edit_template, {
+                    "request": request,
+                    "view": view,
+                    "form_fields": form_fields,
+                    "form_sections": view.form_sections,
+                    "item": item,
+                    "action": f"/{view.name}/{item_id}/edit",
+                    "title": f"Edit {view.display_name}",
+                }, headers={
+                    "HX-Trigger": json.dumps({"showToast": {
+                        "message": e.message, "type": "danger", "title": "Validation Error",
+                    }}),
+                })
             return RedirectResponse(f"/{view.name}", status_code=303)
 
         @self.router.post(f"/{self.name}/{{item_id}}/delete", response_class=HTMLResponse)
@@ -628,6 +717,26 @@ class CRUDView:
                     value = col.type.enum_class(value)
 
                 setattr(item, key, value)
+
+    def validate(self, item, form_data, is_new: bool):
+        """Override to add custom validation before create/edit commits.
+
+        Raise ``ValidationError`` to abort the save and show a toast to the user.
+
+        Args:
+            item: The model instance (already has form data applied).
+            form_data: The raw form data dict.
+            is_new: True for create, False for edit.
+
+        Example::
+
+            def validate(self, item, form_data, is_new):
+                if not item.hostname:
+                    raise ValidationError("Hostname is required")
+                if is_new and self.model.query.filter_by(hostname=item.hostname).first():
+                    raise ValidationError("Hostname already exists")
+        """
+        pass
 
     def register(self, app):
         """Register this view's routes with the FastAPI app."""

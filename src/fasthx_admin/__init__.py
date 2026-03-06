@@ -5,7 +5,7 @@ A modern replacement for Flask-Admin with full control over rendering,
 HTMX interactions, dark/light theming, and OIDC authentication.
 """
 
-from .crud import Admin, CRUDView, COLUMN_TYPE_MAP
+from .crud import Admin, CRUDView, COLUMN_TYPE_MAP, toast_response, ValidationError
 from .database import Base, init_db, get_db, get_engine
 from .auth import get_current_user, oidc_login, AuthError, AUTH_DISABLED
 from .ai_chat import ToolRegistry, tool_registry, AIProvider, OpenAICompatibleProvider
@@ -16,6 +16,8 @@ __all__ = [
     "Admin",
     "CRUDView",
     "COLUMN_TYPE_MAP",
+    "toast_response",
+    "ValidationError",
     "Base",
     "init_db",
     "get_db",

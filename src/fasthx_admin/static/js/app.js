@@ -21,6 +21,48 @@ document.addEventListener('htmx:afterRequest', function (event) {
     if (indicator) indicator.style.display = 'none';
 });
 
+// Toast notifications — triggered via HX-Trigger: {"showToast": {"message": "...", "type": "success"}}
+function showToast(detail) {
+    var data = typeof detail === 'string' ? { message: detail } : detail;
+    var message = data.message || '';
+    var type = data.type || 'info';
+    var title = data.title || type.charAt(0).toUpperCase() + type.slice(1);
+    var delay = data.delay || 5000;
+
+    var icons = {
+        success: 'check-circle-fill',
+        danger: 'exclamation-triangle-fill',
+        warning: 'exclamation-triangle-fill',
+        info: 'info-circle-fill'
+    };
+    var icon = icons[type] || 'info-circle-fill';
+
+    var toastEl = document.createElement('div');
+    toastEl.className = 'toast';
+    toastEl.setAttribute('role', 'alert');
+    toastEl.innerHTML =
+        '<div class="toast-header">' +
+        '<i class="bi bi-' + icon + ' text-' + type + ' me-2"></i>' +
+        '<strong class="me-auto">' + title + '</strong>' +
+        '<button type="button" class="btn-close" data-bs-dismiss="toast"></button>' +
+        '</div>' +
+        '<div class="toast-body">' + message + '</div>';
+
+    var container = document.getElementById('toast-container');
+    if (container) {
+        container.appendChild(toastEl);
+        var toast = new bootstrap.Toast(toastEl, { delay: delay });
+        toast.show();
+        toastEl.addEventListener('hidden.bs.toast', function () {
+            toastEl.remove();
+        });
+    }
+}
+
+document.addEventListener('showToast', function (event) {
+    showToast(event.detail);
+});
+
 // Auto-dismiss alerts after 5 seconds
 document.addEventListener('DOMContentLoaded', function () {
     document.querySelectorAll('.alert-dismissible').forEach(function (alert) {

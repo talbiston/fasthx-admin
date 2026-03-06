@@ -27,6 +27,8 @@ A modern admin interface framework for FastAPI built with HTMX, Jinja2, and Boot
   - [setup_endpoints Override (Legacy)](#setup_endpoints-override-legacy)
   - [Instance State in Custom Endpoints](#instance-state-in-custom-endpoints)
 - [Dependent Dropdowns](#dependent-dropdowns)
+- [Toast Notifications](#toast-notifications)
+- [Validation](#validation)
 - [Progress Bar](#progress-bar)
 - [Authentication](#authentication)
 - [AI Chat (Optional)](#ai-chat-optional)
@@ -691,6 +693,90 @@ class DeviceView(CRUDView):
 ```
 
 The `partials/dropdown_options.html` template renders `<option>` tags that replace the target `<select>`'s contents.
+
+---
+
+## Toast Notifications
+
+fasthx-admin includes a built-in toast notification system powered by Bootstrap toasts and HTMX triggers. Toasts appear in the bottom-right corner and auto-dismiss after 5 seconds.
+
+### toast_response helper
+
+Use `toast_response()` in custom endpoints to show a toast after an action:
+
+```python
+from fasthx_admin import CRUDView, toast_response
+
+class EdgeView(CRUDView):
+    model = FortiEdge
+
+    @CRUDView.endpoint("/{name}/{item_id}/deploy", methods=["POST"])
+    async def deploy(self, request: Request, item_id: int, db: Session = Depends(get_db)):
+        edge = db.query(self.model).filter(self.model.id == item_id).first()
+        if not edge:
+            return toast_response("Edge not found", type="danger", status_code=404)
+
+        # ... start deployment ...
+        return toast_response("Deployment started!", type="success", redirect=f"/{self.name}")
+```
+
+**Parameters:**
+
+| Parameter | Description |
+|-----------|-------------|
+| `message` | The toast message text |
+| `type` | `"success"`, `"danger"`, `"warning"`, or `"info"` (default) |
+| `title` | Optional title (defaults to capitalised type) |
+| `redirect` | Optional URL — adds `HX-Redirect` header for page navigation after toast |
+| `status_code` | HTTP status code (default 200) |
+
+### JavaScript API
+
+You can also trigger toasts from client-side JavaScript:
+
+```js
+showToast({ message: "Saved!", type: "success" });
+showToast({ message: "Something went wrong", type: "danger", title: "Error" });
+```
+
+---
+
+## Validation
+
+Override the `validate()` method on a CRUDView to add custom validation to create and edit forms. When validation fails, the form re-renders with the user's values preserved and a danger toast is shown.
+
+```python
+from fasthx_admin import CRUDView, ValidationError
+
+class CustomerView(CRUDView):
+    model = Customer
+
+    def validate(self, item, form_data, is_new):
+        if not item.name or len(item.name.strip()) < 2:
+            raise ValidationError("Customer name must be at least 2 characters")
+        if is_new and not item.sid:
+            raise ValidationError("SID is required for new customers")
+```
+
+**How it works:**
+
+1. User submits the create or edit form
+2. `_apply_form_data()` sets values on the model instance
+3. `validate(item, form_data, is_new)` is called
+4. If `ValidationError` is raised, the form re-renders with values intact and a toast shows the error
+5. If no error, the item is saved and the user is redirected
+
+You can also raise `ValidationError` from `_apply_form_data()` if you need to validate during data transformation:
+
+```python
+class OfferingView(CRUDView):
+    model = Offering
+
+    def _apply_form_data(self, item, form_data):
+        super()._apply_form_data(item, form_data)
+        if item.serverid and not item.ipaddress:
+            raise ValidationError("IP address is required when a server is selected")
+```
 
 ---
 

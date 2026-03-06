@@ -21,7 +21,7 @@ from fastapi.responses import HTMLResponse, RedirectResponse
 from sqlalchemy.orm import Session
 from starlette.middleware.sessions import SessionMiddleware
 
-from fasthx_admin import Admin, CRUDView, Base, init_db, get_db, get_current_user, oidc_login, AuthError, tool_registry
+from fasthx_admin import Admin, CRUDView, Base, init_db, get_db, get_current_user, oidc_login, AuthError, tool_registry, toast_response, ValidationError
 
 from models import Customer, Orchestrator, FortiEdge, BuildStatus, EdgeStatus
 
@@ -209,6 +209,12 @@ class CustomerView(CRUDView):
     column_list = ["id", "name", "sid", "adom"]
     form_sections = {"Basic Info": ["name", "sid"], "Configuration": ["adom"]}
 
+    def validate(self, item, form_data, is_new):
+        if not item.name or len(item.name.strip()) < 2:
+            raise ValidationError("Customer name must be at least 2 characters")
+        if not item.sid or not item.sid.strip():
+            raise ValidationError("SID is required")
+
 
 class OrchestratorView(CRUDView):
     model = Orchestrator
@@ -392,12 +398,12 @@ class EdgeView(CRUDView):
     async def reset_edge(self, request: Request, item_id: int, db: Session = Depends(get_db)):
         edge = db.query(self.model).filter(self.model.id == item_id).first()
         if not edge:
-            return HTMLResponse("Not found", status_code=404)
+            return toast_response("Edge not found", type="danger", status_code=404)
         edge.status = EdgeStatus.PENDING
         edge.deploy_progress = 0
         db.commit()
         self.deploy_progress.pop(item_id, None)
-        return HTMLResponse("", headers={"HX-Redirect": f"/{self.name}"})
+        return toast_response("Edge reset successfully", type="success", redirect=f"/{self.name}")
 
 
 # --- Register views ---
