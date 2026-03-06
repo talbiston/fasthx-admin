@@ -869,3 +869,50 @@ code {
 .sidebar-nav::-webkit-scrollbar-thumb:hover {
     background: #6b7280;
 }
+
+/* ---- Tom Select theme overrides ---- */
+
+.ts-wrapper.form-select {
+    padding: 0;
+    border: none;
+    background: none;
+}
+
+.ts-control {
+    background-color: var(--bg-base) !important;
+    border-color: var(--border) !important;
+    color: var(--text) !important;
+    border-radius: 0.375rem;
+}
+
+.ts-control:focus-within,
+.ts-wrapper.focus .ts-control {
+    background-color: var(--bg-base) !important;
+    border-color: var(--accent) !important;
+    box-shadow: 0 0 0 0.2rem var(--accent-glow) !important;
+}
+
+.ts-control input {
+    color: var(--text) !important;
+}
+
+.ts-dropdown {
+    background-color: var(--bg-surface) !important;
+    border-color: var(--border) !important;
+    color: var(--text) !important;
+}
+
+.ts-dropdown .option {
+    color: var(--text) !important;
+}
+
+.ts-dropdown .option:hover,
+.ts-dropdown .active {
+    background-color: var(--bg-elevated) !important;
+    color: var(--text) !important;
+}
+
+.ts-dropdown .selected {
+    background-color: var(--accent) !important;
+    color: #fff !important;
+}

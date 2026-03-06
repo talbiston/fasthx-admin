@@ -29,3 +29,27 @@ document.addEventListener('DOMContentLoaded', function () {
         }, 5000);
     });
 });
+
+// Tom Select - searchable dropdowns for all select.form-select elements
+function initTomSelect(root) {
+    if (typeof TomSelect === 'undefined') return;
+    var container = root || document;
+    container.querySelectorAll('select.form-select').forEach(function (el) {
+        if (el.tomselect) return; // already initialized
+        new TomSelect(el, {
+            create: false,
+            sortField: { field: 'text', direction: 'asc' },
+            allowEmptyOption: true
+        });
+    });
+}
+
+// Initialize on page load
+document.addEventListener('DOMContentLoaded', function () {
+    initTomSelect();
+});
+
+// Re-initialize after HTMX swaps new content in
+document.addEventListener('htmx:afterSwap', function (event) {
+    initTomSelect(event.detail.target);
+});
