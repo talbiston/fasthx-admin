@@ -44,6 +44,25 @@ function initTomSelect(root) {
     });
 }
 
+// Sync Tom Select when HTMX swaps options into an existing select
+function syncTomSelect(target) {
+    if (typeof TomSelect === 'undefined') return;
+    // If HTMX swapped content into a select element, rebuild its Tom Select
+    var selects = target.matches && target.matches('select.form-select')
+        ? [target]
+        : [];
+    selects.forEach(function (el) {
+        if (el.tomselect) {
+            el.tomselect.destroy();
+            new TomSelect(el, {
+                create: false,
+                sortField: { field: 'text', direction: 'asc' },
+                allowEmptyOption: true
+            });
+        }
+    });
+}
+
 // Initialize on page load
 document.addEventListener('DOMContentLoaded', function () {
     initTomSelect();
@@ -51,5 +70,6 @@ document.addEventListener('DOMContentLoaded', function () {
 
 // Re-initialize after HTMX swaps new content in
 document.addEventListener('htmx:afterSwap', function (event) {
+    syncTomSelect(event.detail.target);
     initTomSelect(event.detail.target);
 });
