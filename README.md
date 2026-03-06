@@ -18,6 +18,7 @@ A modern admin interface framework for FastAPI built with HTMX, Jinja2, and Boot
   - [Form Configuration](#form-configuration)
   - [Form Sections (Accordion Groups)](#form-sections-accordion-groups)
   - [Form Widget Overrides](#form-widget-overrides)
+  - [AJAX Select (Searchable Foreign Keys)](#ajax-select-searchable-foreign-keys)
   - [Row Actions](#row-actions)
   - [HTMX Polling Columns](#htmx-polling-columns)
   - [Permissions](#permissions)
@@ -56,6 +57,7 @@ A modern admin interface framework for FastAPI built with HTMX, Jinja2, and Boot
 - **OIDC/Keycloak auth** -- Resource Owner Password Credentials flow with group-based access
 - **Dev mode** -- set `AUTH_DISABLED=1` to bypass auth entirely
 - **Foreign key dropdowns** -- auto-populated from related models
+- **AJAX select fields** -- searchable, paginated foreign key selects via HTMX (replaces Flask-Admin's `form_ajax_refs`)
 - **Pagination** -- configurable page size with prev/next navigation
 - **Built-in templates** -- 7 page templates + 8 partials, all customizable
 - **AI chat widget (optional)** -- pluggable LLM-powered assistant with tool calling, settings UI, and OpenAI-compatible provider
@@ -448,6 +450,49 @@ class OrchestratorView(CRUDView):
         },
     }
 ```
+
+### AJAX Select (Searchable Foreign Keys)
+
+For foreign key fields with large option sets, use `form_ajax_refs` to replace the standard dropdown with a searchable, paginated select powered by HTMX. This is the fasthx-admin equivalent of Flask-Admin's `form_ajax_refs`.
+
+```python
+from myapp.models import Offering, Server
+
+class OfferingView(CRUDView):
+    model = Offering
+
+    form_ajax_refs = {
+        "serverid": {
+            "model": Server,           # The related SQLAlchemy model
+            "fields": ["hostname"],     # Columns to search against (ilike)
+            "placeholder": "Please select uCPE",  # Search input placeholder
+            "page_size": 10,            # Results per page (default: 10)
+        }
+    }
+```
+
+**How it works:**
+
+1. The form renders a text search input above a multi-row `<select>` (instead of a single dropdown with all options)
+2. As the user types, HTMX fires a `GET /{view}/ajax/{field}?q=<term>` request after a 300ms debounce
+3. The endpoint filters the target model using `ilike` on the configured `fields` and returns paginated `<option>` HTML fragments
+4. If more results exist beyond `page_size`, an "infinite scroll" trigger auto-loads the next page when the user scrolls to the bottom of the select list (using `hx-trigger="intersect once"`)
+5. On edit forms, the currently selected value is pre-populated in the select
+
+**Configuration options:**
+
+| Key | Type | Default | Description |
+|---|---|---|---|
+| `model` | SQLAlchemy model | *(required)* | The related model to search |
+| `fields` | `list[str]` | `[]` | Model columns to search with `ilike` |
+| `placeholder` | `str` | `"Type to search..."` | Placeholder text for the search input |
+| `page_size` | `int` | `10` | Number of results per HTMX request |
+
+**Auto-registered endpoint:**
+
+Each `form_ajax_refs` entry registers a `GET /{view_name}/ajax/{field_key}` route that accepts:
+- `q` -- search term (optional)
+- `page` -- page number (default: 1)
 
 ### Row Actions
 
@@ -1302,6 +1347,7 @@ fasthx-admin is designed as a drop-in conceptual replacement for Flask-Admin. He
 | `form_columns` | `form_columns` | Identical |
 | `form_create_rules` + `FieldSet()` | `form_sections` | Dict instead of list of rules |
 | `form_args` | `form_widget_overrides` | Renamed, supports HTMX attrs |
+| `form_ajax_refs` | `form_ajax_refs` | Same concept; uses HTMX instead of Select2 |
 | `column_extra_row_actions` | `row_actions` | List of dicts with HTMX attrs |
 | `@expose()` custom endpoints | `setup_endpoints()` override | Define on `self.router` |
 | `Markup()` in formatters | Raw HTML strings | Templates use `\| safe` filter |
