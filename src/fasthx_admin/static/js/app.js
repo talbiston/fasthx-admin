@@ -7,6 +7,7 @@ function toggleTheme() {
     var next = current === 'dark' ? 'light' : 'dark';
     html.setAttribute('data-bs-theme', next);
     localStorage.setItem('theme', next);
+    if (typeof restyleAllTomSelects === 'function') restyleAllTomSelects();
 }
 
 // Show global loading indicator for HTMX requests
@@ -31,34 +32,66 @@ document.addEventListener('DOMContentLoaded', function () {
 });
 
 // Tom Select - searchable dropdowns for all select.form-select elements
+function getTomSelectOptions(el) {
+    // Find placeholder text from the empty option
+    var emptyOption = el.querySelector('option[value=""]');
+    var placeholder = emptyOption ? emptyOption.textContent.trim() : 'Select...';
+    // Remove the empty option so it doesn't show as a selectable item
+    if (emptyOption) emptyOption.remove();
+    return {
+        create: false,
+        sortField: { field: 'text', direction: 'asc' },
+        placeholder: placeholder,
+        allowEmptyOption: false
+    };
+}
+
+function getTomSelectColors() {
+    var isDark = document.documentElement.getAttribute('data-bs-theme') === 'dark';
+    return {
+        bg: isDark ? '#1f1f1f' : '#f3f4f6',
+        border: isDark ? '#404040' : '#d1d5db',
+        color: isDark ? '#ffffff' : '#1f2937'
+    };
+}
+
+function styleTomSelect(tsInstance) {
+    var control = tsInstance.control;
+    if (!control) return;
+    var c = getTomSelectColors();
+    control.style.setProperty('background', c.bg, 'important');
+    control.style.setProperty('border', '1px solid ' + c.border, 'important');
+    control.style.setProperty('border-radius', '0.375rem');
+    control.style.setProperty('color', c.color, 'important');
+}
+
+function restyleAllTomSelects() {
+    document.querySelectorAll('select.form-select').forEach(function (el) {
+        if (el.tomselect) styleTomSelect(el.tomselect);
+    });
+}
+
 function initTomSelect(root) {
     if (typeof TomSelect === 'undefined') return;
     var container = root || document;
     container.querySelectorAll('select.form-select').forEach(function (el) {
         if (el.tomselect) return; // already initialized
-        new TomSelect(el, {
-            create: false,
-            sortField: { field: 'text', direction: 'asc' },
-            allowEmptyOption: true
-        });
+        var ts = new TomSelect(el, getTomSelectOptions(el));
+        styleTomSelect(ts);
     });
 }
 
 // Sync Tom Select when HTMX swaps options into an existing select
 function syncTomSelect(target) {
     if (typeof TomSelect === 'undefined') return;
-    // If HTMX swapped content into a select element, rebuild its Tom Select
     var selects = target.matches && target.matches('select.form-select')
         ? [target]
         : [];
     selects.forEach(function (el) {
         if (el.tomselect) {
             el.tomselect.destroy();
-            new TomSelect(el, {
-                create: false,
-                sortField: { field: 'text', direction: 'asc' },
-                allowEmptyOption: true
-            });
+            var ts = new TomSelect(el, getTomSelectOptions(el));
+            styleTomSelect(ts);
         }
     });
 }
