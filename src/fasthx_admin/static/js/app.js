@@ -81,13 +81,18 @@ function getAjaxTomSelectOptions(el) {
         valueField: 'value',
         labelField: 'label',
         searchField: 'label',
+        firstUrl: function (query) {
+            return ajaxUrl + '?q=' + encodeURIComponent(query);
+        },
+        shouldLoad: function () { return true; },
         load: function (query, callback) {
             var url = ajaxUrl + '?q=' + encodeURIComponent(query);
             fetch(url)
                 .then(function (resp) { return resp.json(); })
                 .then(function (data) { callback(data); })
                 .catch(function () { callback(); });
-        }
+        },
+        score: function () { return function () { return 1; }; }
     };
 }
 
@@ -104,6 +109,13 @@ function initTomSelect(root) {
         }
         var ts = new TomSelect(el, opts);
         styleTomSelect(ts);
+        if (el.hasAttribute('data-ajax-url')) {
+            ts.on('focus', function () {
+                if (!Object.keys(ts.options).length) {
+                    ts.load('');
+                }
+            });
+        }
     });
 }
 
