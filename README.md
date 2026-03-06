@@ -1315,7 +1315,7 @@ The package includes a full demo application in `examples/demo/`:
 ```bash
 git clone https://github.com/talbiston/fasthx-admin.git
 cd fasthx-admin
-pip install -e .[dev]
+pip install -e .[dev]       # install from project root
 cd examples/demo
 AUTH_DISABLED=1 uvicorn app:app --reload
 ```
