@@ -23,6 +23,9 @@ A modern admin interface framework for FastAPI built with HTMX, Jinja2, and Boot
   - [HTMX Polling Columns](#htmx-polling-columns)
   - [Permissions](#permissions)
 - [Custom Endpoints](#custom-endpoints)
+  - [Endpoint Decorator (Recommended)](#endpoint-decorator-recommended)
+  - [setup_endpoints Override (Legacy)](#setup_endpoints-override-legacy)
+  - [Instance State in Custom Endpoints](#instance-state-in-custom-endpoints)
 - [Dependent Dropdowns](#dependent-dropdowns)
 - [Progress Bar](#progress-bar)
 - [Authentication](#authentication)
@@ -573,7 +576,11 @@ All default to `True`.
 
 ## Custom Endpoints
 
-Override `setup_endpoints()` to add custom routes to a view's router. These are registered alongside the auto-generated CRUD routes.
+Add custom routes to a CRUDView using the `@CRUDView.endpoint` decorator. These are registered alongside the auto-generated CRUD routes.
+
+### Endpoint Decorator (Recommended)
+
+Decorate methods directly on the class. Use `{name}` in the path — it's automatically replaced with `self.name` at init time.
 
 ```python
 from fastapi import Request, Depends
@@ -584,39 +591,53 @@ from fasthx_admin import CRUDView, get_db
 class OrchestratorView(CRUDView):
     model = Orchestrator
 
-    def setup_endpoints(self):
-        view = self
-        model = self.model
-        templates = self.templates
+    # Custom action: trigger a build
+    @CRUDView.endpoint("/{name}/{item_id}/build", methods=["POST"], response_class=HTMLResponse)
+    async def build(self, request: Request, item_id: int, db: Session = Depends(get_db)):
+        orch = db.query(self.model).filter(self.model.id == item_id).first()
+        if not orch:
+            return HTMLResponse("Not found", status_code=404)
+        orch.build_status = BuildStatus.BUILDING
+        db.commit()
+        # HX-Redirect tells HTMX to do a full page navigation
+        return HTMLResponse("", headers={"HX-Redirect": f"/{self.name}"})
 
-        # Custom action: trigger a build
-        @self.router.post(f"/{self.name}/{{item_id}}/build", response_class=HTMLResponse)
-        async def build(request: Request, item_id: int, db: Session = Depends(get_db)):
-            orch = db.query(model).filter(model.id == item_id).first()
-            if not orch:
-                return HTMLResponse("Not found", status_code=404)
-            orch.build_status = BuildStatus.BUILDING
-            db.commit()
-            # HX-Redirect tells HTMX to do a full page navigation
-            return HTMLResponse("", headers={"HX-Redirect": f"/{view.name}"})
-
-        # Custom API: return filtered options for a dependent dropdown
-        @self.router.get("/api/devices-for-site", response_class=HTMLResponse)
-        async def devices_for_site(
-            request: Request, site_id: int = 0, db: Session = Depends(get_db)
-        ):
-            options = []
-            if site_id:
-                devices = db.query(Device).filter(Device.site_id == site_id).all()
-                options = [{"id": d.id, "label": d.hostname} for d in devices]
-            return templates.TemplateResponse("partials/dropdown_options.html", {
-                "request": request,
-                "options": options,
-                "selected": None,
-            })
+    # Custom API: return filtered options for a dependent dropdown
+    # For non-{name} paths, use the literal path string
+    @CRUDView.endpoint("/api/devices-for-site", methods=["GET"], response_class=HTMLResponse)
+    async def devices_for_site(self, request: Request, site_id: int = 0, db: Session = Depends(get_db)):
+        options = []
+        if site_id:
+            devices = db.query(Device).filter(Device.site_id == site_id).all()
+            options = [{"id": d.id, "label": d.hostname} for d in devices]
+        return self.templates.TemplateResponse("partials/dropdown_options.html", {
+            "request": request,
+            "options": options,
+            "selected": None,
+        })
 ```
 
-### Instance state in custom endpoints
+**Key points:**
+- `{name}` in the path is replaced with the view's `name` attribute
+- `methods=["POST"]` or `methods=["GET"]` — defaults to `["GET"]` if omitted
+- Any extra kwargs (e.g. `response_class`) are passed to FastAPI's `add_api_route`
+- `self` gives direct access to `self.model`, `self.name`, `self.templates`, etc.
+
+### setup_endpoints Override (Legacy)
+
+The older `setup_endpoints()` override still works and can be used alongside decorators:
+
+```python
+class MyView(CRUDView):
+    model = MyModel
+
+    def setup_endpoints(self):
+        @self.router.post(f"/{self.name}/{{item_id}}/action", response_class=HTMLResponse)
+        async def action(request: Request, item_id: int, db: Session = Depends(get_db)):
+            ...
+```
+
+### Instance State in Custom Endpoints
 
 If your view needs to track state (like deployment progress), add it in `__init__`:
 
@@ -628,13 +649,10 @@ class EdgeView(CRUDView):
         self.deploy_progress = {}   # Must be set BEFORE super().__init__
         super().__init__(templates)
 
-    def setup_endpoints(self):
-        view = self
-
-        @self.router.post(f"/{self.name}/{{item_id}}/deploy", response_class=HTMLResponse)
-        async def deploy(request: Request, item_id: int, db: Session = Depends(get_db)):
-            view.deploy_progress[item_id] = {"progress": 0, "status": "deploying"}
-            # ... start deployment logic
+    @CRUDView.endpoint("/{name}/{item_id}/deploy", methods=["POST"], response_class=HTMLResponse)
+    async def deploy(self, request: Request, item_id: int, db: Session = Depends(get_db)):
+        self.deploy_progress[item_id] = {"progress": 0, "status": "deploying"}
+        # ... start deployment logic
 ```
 
 ---
@@ -656,21 +674,20 @@ class DeviceView(CRUDView):
     }
 ```
 
-**Step 2: Create the endpoint in `setup_endpoints()`**
+**Step 2: Create the endpoint**
 
 ```python
-    def setup_endpoints(self):
-        @self.router.get("/api/devices-for-site", response_class=HTMLResponse)
-        async def devices_for_site(request: Request, site_id: int = 0, db: Session = Depends(get_db)):
-            options = []
-            if site_id:
-                items = db.query(Device).filter(Device.site_id == site_id).all()
-                options = [{"id": d.id, "label": d.hostname} for d in items]
-            return self.templates.TemplateResponse("partials/dropdown_options.html", {
-                "request": request,
-                "options": options,
-                "selected": None,
-            })
+    @CRUDView.endpoint("/api/devices-for-site", methods=["GET"], response_class=HTMLResponse)
+    async def devices_for_site(self, request: Request, site_id: int = 0, db: Session = Depends(get_db)):
+        options = []
+        if site_id:
+            items = db.query(Device).filter(Device.site_id == site_id).all()
+            options = [{"id": d.id, "label": d.hostname} for d in items]
+        return self.templates.TemplateResponse("partials/dropdown_options.html", {
+            "request": request,
+            "options": options,
+            "selected": None,
+        })
 ```
 
 The `partials/dropdown_options.html` template renders `<option>` tags that replace the target `<select>`'s contents.

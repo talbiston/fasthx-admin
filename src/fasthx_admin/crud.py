@@ -7,8 +7,10 @@ This replaces Flask-Admin's ModelView with full control over rendering.
 
 from __future__ import annotations
 
+import functools
 import math
 from collections import defaultdict
+from inspect import Parameter, signature
 from pathlib import Path
 from typing import Any, Callable, Dict, List, Optional
 
@@ -57,6 +59,37 @@ class CRUDView:
         admin = Admin(app, templates)
         admin.add_view(CustomerView)
     """
+
+    # --- Endpoint decorator ---
+
+    @staticmethod
+    def endpoint(path: str, methods: list[str] | None = None, **route_kwargs):
+        """Decorator for declaring custom endpoints on a CRUDView subclass.
+
+        Usage::
+
+            class MyView(CRUDView):
+                model = MyModel
+
+                @CRUDView.endpoint("/{name}/{item_id}/reset", methods=["POST"])
+                async def reset(self, request: Request, item_id: int, db: Session = Depends(get_db)):
+                    ...
+
+        ``{name}`` in the path is replaced with ``self.name`` at init time.
+        The ``self`` parameter is bound automatically and hidden from FastAPI.
+        """
+        if methods is None:
+            methods = ["GET"]
+
+        def decorator(fn):
+            fn._endpoint_meta = {
+                "path": path,
+                "methods": methods,
+                "route_kwargs": route_kwargs,
+            }
+            return fn
+
+        return decorator
 
     # --- Class-level config (override in subclasses) ---
     model = None
@@ -193,6 +226,7 @@ class CRUDView:
         self._setup_routes()
         self._setup_htmx_polling_routes()
         self._setup_ajax_select_routes()
+        self._setup_decorated_endpoints()
         self.setup_endpoints()
 
     def _setup_ajax_select_routes(self):
@@ -318,6 +352,49 @@ class CRUDView:
                 make_handler(field_key),
                 methods=["GET"],
                 response_class=HTMLResponse,
+            )
+
+    def _setup_decorated_endpoints(self):
+        """Collect methods decorated with @CRUDView.endpoint and register them."""
+        import typing
+
+        for attr_name in dir(type(self)):
+            fn = getattr(type(self), attr_name, None)
+            if fn is None or not callable(fn) or not hasattr(fn, "_endpoint_meta"):
+                continue
+
+            meta = fn._endpoint_meta
+            path = meta["path"].replace("{name}", self.name)
+
+            bound = fn.__get__(self, type(self))
+
+            # Resolve string annotations (from `from __future__ import annotations`)
+            # back to real types so FastAPI can process Depends(), Request, etc.
+            hints = typing.get_type_hints(fn, include_extras=True)
+
+            sig = signature(fn)
+            params = []
+            for pname, p in sig.parameters.items():
+                if pname == "self":
+                    continue
+                annotation = hints.get(pname, p.annotation)
+                params.append(p.replace(annotation=annotation))
+            new_sig = sig.replace(
+                parameters=params,
+                return_annotation=hints.get("return", sig.return_annotation),
+            )
+
+            @functools.wraps(fn)
+            async def make_handler(bound_method=bound, **kwargs):
+                return await bound_method(**kwargs)
+
+            make_handler.__signature__ = new_sig
+
+            self.router.add_api_route(
+                path,
+                make_handler,
+                methods=meta["methods"],
+                **meta["route_kwargs"],
             )
 
     def setup_endpoints(self):

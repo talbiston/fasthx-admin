@@ -342,65 +342,62 @@ class EdgeView(CRUDView):
         self.deploy_progress: Dict[int, dict] = {}
         super().__init__(templates)
 
-    def setup_endpoints(self):
-        view = self
-        model = self.model
-        templates = self.templates
+    # --- Custom endpoints (decorator style) ---
 
-        @self.router.post(f"/{self.name}/{{item_id}}/deploy", response_class=HTMLResponse)
-        async def deploy_edge(request: Request, item_id: int, db: Session = Depends(get_db)):
-            edge = db.query(model).filter(model.id == item_id).first()
-            if not edge:
-                return HTMLResponse("Not found", status_code=404)
-            edge.status = EdgeStatus.DEPLOYING
-            edge.deploy_progress = 0
-            db.commit()
-            view.deploy_progress[item_id] = {
-                "progress": 0,
-                "status": "deploying",
-                "started": time.time(),
-            }
-            colspan = view.get_colspan()
-            return templates.TemplateResponse("partials/progress_bar.html", {
-                "request": request,
-                "edge_id": item_id,
-                "progress": 0,
-                "status": "Starting...",
-                "colspan": colspan,
-            })
+    @CRUDView.endpoint("/{name}/{item_id}/deploy", methods=["POST"], response_class=HTMLResponse)
+    async def deploy_edge(self, request: Request, item_id: int, db: Session = Depends(get_db)):
+        edge = db.query(self.model).filter(self.model.id == item_id).first()
+        if not edge:
+            return HTMLResponse("Not found", status_code=404)
+        edge.status = EdgeStatus.DEPLOYING
+        edge.deploy_progress = 0
+        db.commit()
+        self.deploy_progress[item_id] = {
+            "progress": 0,
+            "status": "deploying",
+            "started": time.time(),
+        }
+        colspan = self.get_colspan()
+        return self.templates.TemplateResponse("partials/progress_bar.html", {
+            "request": request,
+            "edge_id": item_id,
+            "progress": 0,
+            "status": "Starting...",
+            "colspan": colspan,
+        })
 
-        @self.router.get(f"/{self.name}/{{item_id}}/progress", response_class=HTMLResponse)
-        async def edge_progress(request: Request, item_id: int, db: Session = Depends(get_db)):
-            state = view.deploy_progress.get(item_id, {"progress": 0, "status": "unknown"})
-            if state["progress"] < 100:
-                state["progress"] = min(100, state["progress"] + random.randint(5, 15))
-                view.deploy_progress[item_id] = state
-            if state["progress"] >= 100:
-                edge = db.query(model).filter(model.id == item_id).first()
-                if edge:
-                    edge.status = EdgeStatus.ONLINE
-                    edge.deploy_progress = 100
-                    db.commit()
-                state["status"] = "Complete"
-            colspan = view.get_colspan()
-            return templates.TemplateResponse("partials/progress_bar.html", {
-                "request": request,
-                "edge_id": item_id,
-                "progress": state["progress"],
-                "status": state.get("status", "deploying"),
-                "colspan": colspan,
-            })
+    @CRUDView.endpoint("/{name}/{item_id}/progress", methods=["GET"], response_class=HTMLResponse)
+    async def edge_progress(self, request: Request, item_id: int, db: Session = Depends(get_db)):
+        state = self.deploy_progress.get(item_id, {"progress": 0, "status": "unknown"})
+        if state["progress"] < 100:
+            state["progress"] = min(100, state["progress"] + random.randint(5, 15))
+            self.deploy_progress[item_id] = state
+        if state["progress"] >= 100:
+            edge = db.query(self.model).filter(self.model.id == item_id).first()
+            if edge:
+                edge.status = EdgeStatus.ONLINE
+                edge.deploy_progress = 100
+                db.commit()
+            state["status"] = "Complete"
+        colspan = self.get_colspan()
+        return self.templates.TemplateResponse("partials/progress_bar.html", {
+            "request": request,
+            "edge_id": item_id,
+            "progress": state["progress"],
+            "status": state.get("status", "deploying"),
+            "colspan": colspan,
+        })
 
-        @self.router.post(f"/{self.name}/{{item_id}}/reset", response_class=HTMLResponse)
-        async def reset_edge(request: Request, item_id: int, db: Session = Depends(get_db)):
-            edge = db.query(model).filter(model.id == item_id).first()
-            if not edge:
-                return HTMLResponse("Not found", status_code=404)
-            edge.status = EdgeStatus.PENDING
-            edge.deploy_progress = 0
-            db.commit()
-            view.deploy_progress.pop(item_id, None)
-            return HTMLResponse("", headers={"HX-Redirect": f"/{view.name}"})
+    @CRUDView.endpoint("/{name}/{item_id}/reset", methods=["POST"], response_class=HTMLResponse)
+    async def reset_edge(self, request: Request, item_id: int, db: Session = Depends(get_db)):
+        edge = db.query(self.model).filter(self.model.id == item_id).first()
+        if not edge:
+            return HTMLResponse("Not found", status_code=404)
+        edge.status = EdgeStatus.PENDING
+        edge.deploy_progress = 0
+        db.commit()
+        self.deploy_progress.pop(item_id, None)
+        return HTMLResponse("", headers={"HX-Redirect": f"/{self.name}"})
 
 
 # --- Register views ---
