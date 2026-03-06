@@ -73,6 +73,7 @@ class CRUDView:
     form_columns = None
     form_sections = None
     form_widget_overrides = None
+    form_ajax_refs = None
     row_actions = None
     page_size = 20
     pk_field = "id"
@@ -105,6 +106,7 @@ class CRUDView:
         self.column_formatters = self.column_formatters or {}
         self.column_labels = self.column_labels or {}
         self.form_widget_overrides = self.form_widget_overrides or {}
+        self.form_ajax_refs = self.form_ajax_refs or {}
         self.row_actions = self.row_actions or []
         self.htmx_columns = self.htmx_columns or {}
 
@@ -164,7 +166,10 @@ class CRUDView:
 
                 # Check if this is a foreign key
                 if col_obj.key in self.foreign_keys:
-                    html_type = "select"
+                    if self.form_ajax_refs and col_obj.key in self.form_ajax_refs:
+                        html_type = "ajax_select"
+                    else:
+                        html_type = "select"
 
                 field = {
                     "key": col_obj.key,
@@ -187,7 +192,71 @@ class CRUDView:
         self.router = APIRouter()
         self._setup_routes()
         self._setup_htmx_polling_routes()
+        self._setup_ajax_select_routes()
         self.setup_endpoints()
+
+    def _setup_ajax_select_routes(self):
+        """Register HTMX search endpoints for form_ajax_refs fields."""
+        if not self.form_ajax_refs:
+            return
+
+        view = self
+
+        for field_key, config in self.form_ajax_refs.items():
+            target_model = config["model"]
+            search_fields = config.get("fields", [])
+            page_size = config.get("page_size", 10)
+
+            def make_handler(fk, tgt_model, s_fields, p_size):
+                async def search_handler(
+                    request: Request,
+                    q: str = "",
+                    page: int = 1,
+                    db: Session = Depends(get_db),
+                ):
+                    query = db.query(tgt_model)
+                    if q and s_fields:
+                        filters = [
+                            getattr(tgt_model, f).ilike(f"%{q}%")
+                            for f in s_fields
+                            if hasattr(tgt_model, f)
+                        ]
+                        if filters:
+                            query = query.filter(or_(*filters))
+
+                    total = query.count()
+                    items = query.offset((page - 1) * p_size).limit(p_size).all()
+                    has_more = (page * p_size) < total
+
+                    html = ""
+                    for item in items:
+                        val = getattr(item, "id", "")
+                        label = str(item)
+                        html += f'<option value="{val}">{label}</option>\n'
+
+                    if has_more:
+                        next_url = f"/{view.name}/ajax/{fk}?q={q}&page={page + 1}"
+                        html += (
+                            f'<option value="" disabled '
+                            f'hx-get="{next_url}" '
+                            f'hx-trigger="intersect once" '
+                            f'hx-target="closest select" '
+                            f'hx-swap="beforeend" '
+                            f'hx-process="this">'
+                            f"Loading more...</option>"
+                        )
+                    return HTMLResponse(html)
+
+                search_handler.__name__ = f"{view.name}_{fk}_ajax_search"
+                return search_handler
+
+            handler = make_handler(field_key, target_model, search_fields, page_size)
+            self.router.add_api_route(
+                f"/{self.name}/ajax/{field_key}",
+                handler,
+                methods=["GET"],
+                response_class=HTMLResponse,
+            )
 
     def _get_fk_options(self, db: Session, field_key: str) -> list:
         """Get options for a foreign key select field."""
@@ -457,7 +526,20 @@ class CRUDView:
                 f["value"] = None
 
             if field["is_fk"]:
-                f["choices"] = self._get_fk_options(db, field["key"])
+                if field["key"] in self.form_ajax_refs:
+                    ajax_cfg = self.form_ajax_refs[field["key"]]
+                    f["ajax_url"] = f"/{self.name}/ajax/{field['key']}"
+                    f["placeholder"] = ajax_cfg.get("placeholder", "Type to search...")
+                    if item and f["value"]:
+                        fk = self.foreign_keys.get(field["key"])
+                        target_model = _model_registry.get(fk.column.table.name)
+                        if target_model:
+                            related = db.query(target_model).filter(
+                                getattr(target_model, "id") == f["value"]
+                            ).first()
+                            f["value_label"] = str(related) if related else ""
+                else:
+                    f["choices"] = self._get_fk_options(db, field["key"])
 
             fields.append(f)
         return fields

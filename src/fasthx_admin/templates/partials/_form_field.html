@@ -10,6 +10,29 @@
         </label>
     </div>
 
+    {% elif field.type == 'ajax_select' %}
+    <label for="{{ field.key }}" class="form-label">
+        {{ field.label }}
+        {% if field.required %}<span class="text-danger">*</span>{% endif %}
+    </label>
+    <input type="text" id="{{ field.key }}_search"
+           class="form-control mb-1"
+           placeholder="{{ field.get('placeholder', 'Type to search...') }}"
+           hx-get="{{ field.ajax_url }}"
+           hx-trigger="keyup changed delay:300ms"
+           hx-target="#{{ field.key }}"
+           hx-swap="innerHTML"
+           hx-include="this"
+           name="q"
+           autocomplete="off">
+    <select name="{{ field.key }}" id="{{ field.key }}"
+            class="form-select" size="8"
+            {% if field.required %}required{% endif %}>
+        {% if field.value %}
+        <option value="{{ field.value }}" selected>{{ field.get('value_label', field.value) }}</option>
+        {% endif %}
+    </select>
+
     {% elif field.type == 'select' %}
     <label for="{{ field.key }}" class="form-label">
         {{ field.label }}
