@@ -15,18 +15,10 @@
         {{ field.label }}
         {% if field.required %}<span class="text-danger">*</span>{% endif %}
     </label>
-    <input type="text" id="{{ field.key }}_search"
-           class="form-control mb-1"
-           placeholder="{{ field.get('placeholder', 'Type to search...') }}"
-           hx-get="{{ field.ajax_url }}"
-           hx-trigger="keyup changed delay:300ms"
-           hx-target="#{{ field.key }}"
-           hx-swap="innerHTML"
-           hx-include="this"
-           name="q"
-           autocomplete="off">
     <select name="{{ field.key }}" id="{{ field.key }}"
-            class="form-select" size="8"
+            class="form-select"
+            data-ajax-url="{{ field.ajax_url }}"
+            data-placeholder="{{ field.get('placeholder', 'Type to search...') }}"
             {% if field.required %}required{% endif %}>
         {% if field.value %}
         <option value="{{ field.value }}" selected>{{ field.get('value_label', field.value) }}</option>

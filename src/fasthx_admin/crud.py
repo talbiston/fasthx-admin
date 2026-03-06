@@ -224,28 +224,15 @@ class CRUDView:
                         if filters:
                             query = query.filter(or_(*filters))
 
-                    total = query.count()
                     items = query.offset((page - 1) * p_size).limit(p_size).all()
-                    has_more = (page * p_size) < total
 
-                    html = ""
+                    results = []
                     for item in items:
-                        val = getattr(item, "id", "")
-                        label = str(item)
-                        html += f'<option value="{val}">{label}</option>\n'
-
-                    if has_more:
-                        next_url = f"/{view.name}/ajax/{fk}?q={q}&page={page + 1}"
-                        html += (
-                            f'<option value="" disabled '
-                            f'hx-get="{next_url}" '
-                            f'hx-trigger="intersect once" '
-                            f'hx-target="closest select" '
-                            f'hx-swap="beforeend" '
-                            f'hx-process="this">'
-                            f"Loading more...</option>"
-                        )
-                    return HTMLResponse(html)
+                        results.append({
+                            "value": str(getattr(item, "id", "")),
+                            "label": str(item),
+                        })
+                    return results
 
                 search_handler.__name__ = f"{view.name}_{fk}_ajax_search"
                 return search_handler
@@ -255,7 +242,6 @@ class CRUDView:
                 f"/{self.name}/ajax/{field_key}",
                 handler,
                 methods=["GET"],
-                response_class=HTMLResponse,
             )
 
     def _get_fk_options(self, db: Session, field_key: str) -> list:

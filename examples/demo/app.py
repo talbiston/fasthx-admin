@@ -329,6 +329,14 @@ class EdgeView(CRUDView):
         "Status": ["status"],
         "Relationships": ["customer_id", "orchestrator_id"],
     }
+    form_ajax_refs = {
+        "customer_id": {
+            "model": Customer,
+            "fields": ["name", "sid"],
+            "placeholder": "Search customers...",
+            "page_size": 10,
+        },
+    }
 
     def __init__(self, templates):
         self.deploy_progress: Dict[int, dict] = {}

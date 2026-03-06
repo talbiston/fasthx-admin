@@ -41,6 +41,9 @@ class Customer(Base):
     __admin_icon__ = "building"
     __admin_name__ = "Customers"
 
+    def __str__(self):
+        return f"{self.name} ({self.sid})"
+
     def __repr__(self):
         return f"<Customer {self.name}>"
 

@@ -71,12 +71,38 @@ function restyleAllTomSelects() {
     });
 }
 
+function getAjaxTomSelectOptions(el) {
+    var ajaxUrl = el.getAttribute('data-ajax-url');
+    var placeholder = el.getAttribute('data-placeholder') || 'Type to search...';
+    return {
+        create: false,
+        placeholder: placeholder,
+        allowEmptyOption: false,
+        valueField: 'value',
+        labelField: 'label',
+        searchField: 'label',
+        load: function (query, callback) {
+            var url = ajaxUrl + '?q=' + encodeURIComponent(query);
+            fetch(url)
+                .then(function (resp) { return resp.json(); })
+                .then(function (data) { callback(data); })
+                .catch(function () { callback(); });
+        }
+    };
+}
+
 function initTomSelect(root) {
     if (typeof TomSelect === 'undefined') return;
     var container = root || document;
     container.querySelectorAll('select.form-select').forEach(function (el) {
         if (el.tomselect) return; // already initialized
-        var ts = new TomSelect(el, getTomSelectOptions(el));
+        var opts;
+        if (el.hasAttribute('data-ajax-url')) {
+            opts = getAjaxTomSelectOptions(el);
+        } else {
+            opts = getTomSelectOptions(el);
+        }
+        var ts = new TomSelect(el, opts);
         styleTomSelect(ts);
     });
 }
