@@ -59,8 +59,21 @@ function showToast(detail) {
     }
 }
 
-document.addEventListener('showToast', function (event) {
-    showToast(event.detail);
+// Handle toast triggers from HX-Trigger headers after HTMX settles the DOM
+// Track last processed XHR to avoid duplicate toasts
+var _lastToastXhr = null;
+document.addEventListener('htmx:afterSettle', function (event) {
+    var xhr = event.detail.xhr;
+    if (!xhr || xhr === _lastToastXhr) return;
+    var trigger = xhr.getResponseHeader('HX-Trigger');
+    if (!trigger) return;
+    try {
+        var data = JSON.parse(trigger);
+        if (data.showToast) {
+            _lastToastXhr = xhr;
+            showToast(data.showToast);
+        }
+    } catch (e) {}
 });
 
 // Auto-dismiss alerts after 5 seconds

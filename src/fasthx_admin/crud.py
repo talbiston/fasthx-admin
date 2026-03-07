@@ -558,6 +558,8 @@ class CRUDView:
                         "message": e.message, "type": "danger", "title": "Validation Error",
                     }}),
                 })
+            if request.headers.get("HX-Request"):
+                return HTMLResponse("", headers={"HX-Redirect": f"/{view.name}"})
             return RedirectResponse(f"/{view.name}", status_code=303)
 
         @self.router.get(f"/{self.name}/{{item_id}}", response_class=HTMLResponse)
@@ -647,6 +649,8 @@ class CRUDView:
                         "message": e.message, "type": "danger", "title": "Validation Error",
                     }}),
                 })
+            if request.headers.get("HX-Request"):
+                return HTMLResponse("", headers={"HX-Redirect": f"/{view.name}"})
             return RedirectResponse(f"/{view.name}", status_code=303)
 
         @self.router.post(f"/{self.name}/{{item_id}}/delete", response_class=HTMLResponse)
