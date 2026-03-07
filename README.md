@@ -24,6 +24,18 @@ A modern admin interface framework for FastAPI built with HTMX, Jinja2, and Boot
 ![Toast Notification](https://raw.githubusercontent.com/talbiston/fasthx-admin/main/docs/screenshot-toast.jpg)
 *Toast notifications for validation errors and action feedback*
 
+### AI Settings
+![AI Settings](https://raw.githubusercontent.com/talbiston/fasthx-admin/main/docs/screenshot-ai-settings.jpg)
+*Configure AI provider, model, API key, and connection settings*
+
+### AI Context & Tools
+![AI Context & Tools](https://raw.githubusercontent.com/talbiston/fasthx-admin/main/docs/screenshot-ai-context.jpg)
+*Manage context items and enable/disable AI-callable tools*
+
+### AI Chat Widget
+![AI Chat](https://raw.githubusercontent.com/talbiston/fasthx-admin/main/docs/screenshot-ai-chat.jpg)
+*Built-in AI assistant with tool calling and markdown support*
+
 ## Table of Contents
 
 - [Features](#features)
