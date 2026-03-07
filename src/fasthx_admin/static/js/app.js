@@ -105,7 +105,8 @@ function getTomSelectOptions(el) {
         create: false,
         sortField: { field: 'text', direction: 'asc' },
         placeholder: placeholder,
-        allowEmptyOption: false
+        allowEmptyOption: false,
+        items: []  // Start with nothing selected so placeholder shows
     };
 }
 
@@ -190,7 +191,11 @@ function syncTomSelect(target) {
         : [];
     selects.forEach(function (el) {
         if (el.tomselect) {
+            // Save the new options HTMX just swapped in before destroying,
+            // because destroy() reverts innerHTML to the original state.
+            var newHTML = el.innerHTML;
             el.tomselect.destroy();
+            el.innerHTML = newHTML;
             var ts = new TomSelect(el, getTomSelectOptions(el));
             styleTomSelect(ts);
         }
