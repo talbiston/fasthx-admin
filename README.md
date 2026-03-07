@@ -5,23 +5,23 @@ A modern admin interface framework for FastAPI built with HTMX, Jinja2, and Boot
 ## Screenshots
 
 ### Dashboard
-![Dashboard](docs/screenshot-dashboard.jpg)
+![Dashboard](https://raw.githubusercontent.com/talbiston/fasthx-admin/main/docs/screenshot-dashboard.jpg)
 *Dashboard with clickable summary cards, recent items, and quick actions*
 
 ### List View
-![List View](docs/screenshot-list.jpg)
+![List View](https://raw.githubusercontent.com/talbiston/fasthx-admin/main/docs/screenshot-list.jpg)
 *List view with search, sorting, pagination, and row actions*
 
 ### Form with Sections
-![Form View](docs/screenshot-form.jpg)
+![Form View](https://raw.githubusercontent.com/talbiston/fasthx-admin/main/docs/screenshot-form.jpg)
 *Create/edit form with accordion sections and AJAX select fields*
 
 ### Detail View
-![Detail View](docs/screenshot-detail.jpg)
+![Detail View](https://raw.githubusercontent.com/talbiston/fasthx-admin/main/docs/screenshot-detail.jpg)
 *Detail view with formatted fields*
 
 ### Toast Notifications
-![Toast Notification](docs/screenshot-toast.jpg)
+![Toast Notification](https://raw.githubusercontent.com/talbiston/fasthx-admin/main/docs/screenshot-toast.jpg)
 *Toast notifications for validation errors and action feedback*
 
 ## Table of Contents
