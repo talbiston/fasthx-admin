@@ -20,6 +20,7 @@ from fastapi.responses import HTMLResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from sqlalchemy import inspect, or_, String, cast
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from .auth import get_current_user
@@ -544,6 +545,16 @@ class CRUDView:
                 db.commit()
             except ValidationError as e:
                 db.rollback()
+                error_msg = e.message
+            except IntegrityError as e:
+                db.rollback()
+                error_msg = "A required field is missing or a value already exists."
+            except Exception as e:
+                db.rollback()
+                error_msg = str(e) or "An unexpected error occurred."
+            else:
+                error_msg = None
+            if error_msg:
                 form_fields = view._prepare_form_fields(db, item)
                 return templates.TemplateResponse(view.create_template, {
                     "request": request,
@@ -555,7 +566,7 @@ class CRUDView:
                     "title": f"Create {view.display_name}",
                 }, headers={
                     "HX-Trigger": json.dumps({"showToast": {
-                        "message": e.message, "type": "danger", "title": "Validation Error",
+                        "message": error_msg, "type": "danger", "title": "Validation Error",
                     }}),
                 })
             if request.headers.get("HX-Request"):
@@ -635,6 +646,16 @@ class CRUDView:
                 db.commit()
             except ValidationError as e:
                 db.rollback()
+                error_msg = e.message
+            except IntegrityError as e:
+                db.rollback()
+                error_msg = "A required field is missing or a value already exists."
+            except Exception as e:
+                db.rollback()
+                error_msg = str(e) or "An unexpected error occurred."
+            else:
+                error_msg = None
+            if error_msg:
                 form_fields = view._prepare_form_fields(db, item)
                 return templates.TemplateResponse(view.edit_template, {
                     "request": request,
@@ -646,7 +667,7 @@ class CRUDView:
                     "title": f"Edit {view.display_name}",
                 }, headers={
                     "HX-Trigger": json.dumps({"showToast": {
-                        "message": e.message, "type": "danger", "title": "Validation Error",
+                        "message": error_msg, "type": "danger", "title": "Validation Error",
                     }}),
                 })
             if request.headers.get("HX-Request"):

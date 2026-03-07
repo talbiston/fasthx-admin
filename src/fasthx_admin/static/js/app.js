@@ -59,8 +59,10 @@ function showToast(detail) {
     }
 }
 
-// Handle toast triggers from HX-Trigger headers after HTMX settles the DOM
-// Track last processed XHR to avoid duplicate toasts
+// Handle toast triggers from HX-Trigger headers after HTMX settles the DOM.
+// For hx-boost requests the entire <body> is replaced, so we must defer
+// the toast creation until the new DOM (with a fresh #toast-container) is
+// fully in place.  A short setTimeout ensures we run after the swap.
 var _lastToastXhr = null;
 document.addEventListener('htmx:afterSettle', function (event) {
     var xhr = event.detail.xhr;
@@ -71,7 +73,7 @@ document.addEventListener('htmx:afterSettle', function (event) {
         var data = JSON.parse(trigger);
         if (data.showToast) {
             _lastToastXhr = xhr;
-            showToast(data.showToast);
+            setTimeout(function () { showToast(data.showToast); }, 50);
         }
     } catch (e) {}
 });
