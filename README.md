@@ -4,13 +4,25 @@ A modern admin interface framework for FastAPI built with HTMX, Jinja2, and Boot
 
 ## Screenshots
 
-| List View | Form with Sections |
-|---|---|
-| ![List View](https://raw.githubusercontent.com/talbiston/fasthx-admin/main/docs/screenshot-list.png) | ![Form View](https://raw.githubusercontent.com/talbiston/fasthx-admin/main/docs/screenshot-form.png) |
+<p align="center">
+  <img src="https://raw.githubusercontent.com/talbiston/fasthx-admin/main/docs/screenshot-list.png" width="700" alt="List View">
+</p>
+<p align="center"><em>List view with search, sorting, pagination, and row actions</em></p>
 
-| Detail View | Toast Notifications |
-|---|---|
-| ![Detail View](https://raw.githubusercontent.com/talbiston/fasthx-admin/main/docs/screenshot-detail.png) | ![Toast Notification](https://raw.githubusercontent.com/talbiston/fasthx-admin/main/docs/screenshot-toast.png) |
+<p align="center">
+  <img src="https://raw.githubusercontent.com/talbiston/fasthx-admin/main/docs/screenshot-form.png" width="700" alt="Form View">
+</p>
+<p align="center"><em>Create/edit form with accordion sections and AJAX select fields</em></p>
+
+<p align="center">
+  <img src="https://raw.githubusercontent.com/talbiston/fasthx-admin/main/docs/screenshot-detail.png" width="700" alt="Detail View">
+</p>
+<p align="center"><em>Detail view with formatted fields</em></p>
+
+<p align="center">
+  <img src="https://raw.githubusercontent.com/talbiston/fasthx-admin/main/docs/screenshot-toast.png" width="700" alt="Toast Notification">
+</p>
+<p align="center"><em>Toast notifications for validation errors and action feedback</em></p>
 
 ## Table of Contents
 
