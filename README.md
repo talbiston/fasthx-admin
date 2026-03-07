@@ -6,11 +6,11 @@ A modern admin interface framework for FastAPI built with HTMX, Jinja2, and Boot
 
 | List View | Form with Sections |
 |---|---|
-| ![List View](docs/screenshot-list.png) | ![Form View](docs/screenshot-form.png) |
+| ![List View](https://raw.githubusercontent.com/talbiston/fasthx-admin/main/docs/screenshot-list.png) | ![Form View](https://raw.githubusercontent.com/talbiston/fasthx-admin/main/docs/screenshot-form.png) |
 
 | Detail View | Toast Notifications |
 |---|---|
-| ![Detail View](docs/screenshot-detail.png) | ![Toast Notification](docs/screenshot-toast.png) |
+| ![Detail View](https://raw.githubusercontent.com/talbiston/fasthx-admin/main/docs/screenshot-detail.png) | ![Toast Notification](https://raw.githubusercontent.com/talbiston/fasthx-admin/main/docs/screenshot-toast.png) |
 
 ## Table of Contents
 
