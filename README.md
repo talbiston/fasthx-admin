@@ -463,14 +463,30 @@ The first section is expanded by default. If `form_sections` is `None`, all fiel
 
 ### Form Widget Overrides
 
-Customize individual form fields with extra attributes or replace their type entirely:
+Customize individual form fields with extra attributes or replace their type entirely. Any key in the override dict is merged into the field metadata, so you can change field types, add attributes, or tweak behavior per field.
+
+**Supported override keys:**
+
+| Key | Description | Example |
+|-----|-------------|---------|
+| `type` | Change the HTML input type. Use `"select"` for dropdowns, `"textarea"` for multi-line text, `"checkbox"` for booleans, or any HTML input type (`"text"`, `"number"`, `"email"`, `"date"`, etc.) | `"type": "select"` |
+| `choices` | List of `(value, label)` tuples for `select` fields | `"choices": [("v1", "Version 1")]` |
+| `label` | Override the auto-generated field label | `"label": "Firmware"` |
+| `required` | Override whether the field shows as required | `"required": False` |
+| `placeholder` | Placeholder text for text inputs | `"placeholder": "e.g. edge-001"` |
+| `hx_get` | HTMX `hx-get` URL for dependent dropdowns | `"hx_get": "/api/options"` |
+| `hx_target` | HTMX `hx-target` selector | `"hx_target": "#other_field"` |
+| `hx_trigger` | HTMX `hx-trigger` event (defaults to `"change"`) | `"hx_trigger": "change"` |
+| `hx_swap` | HTMX `hx-swap` strategy (defaults to `"innerHTML"`) | `"hx_swap": "outerHTML"` |
+
+**Examples:**
 
 ```python
-class OrchestratorView(CRUDView):
-    model = Orchestrator
+class EdgeView(CRUDView):
+    model = Edge
     form_widget_overrides = {
         # Turn a text field into a select with static choices
-        "version": {
+        "firmware_version": {
             "type": "select",
             "choices": [
                 ("6.4", "Version 6.4"),
@@ -478,14 +494,23 @@ class OrchestratorView(CRUDView):
                 ("7.4", "Version 7.4"),
             ],
         },
-        # Add HTMX attributes to trigger dependent dropdowns
-        "customer_id": {
-            "hx_get": "/api/orchestrators-for-customer",
-            "hx_target": "#orchestrator_id",
+        # Override the label and make a field optional
+        "serial_number": {
+            "label": "S/N",
+            "required": False,
         },
         # Add placeholder text
         "hostname": {
             "placeholder": "e.g. edge-001",
+        },
+        # Change a text field to a textarea
+        "notes": {
+            "type": "textarea",
+        },
+        # Add HTMX attributes to trigger dependent dropdowns
+        "customer_id": {
+            "hx_get": "/api/orchestrators-for-customer",
+            "hx_target": "#orchestrator_id",
         },
     }
 ```
