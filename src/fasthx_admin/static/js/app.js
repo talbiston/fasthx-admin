@@ -202,20 +202,49 @@ function syncTomSelect(target) {
     });
 }
 
+// Conditional field visibility — show/hide fields based on a checkbox value
+function initDependsOn(root) {
+    var container = root || document;
+    // Find all fields that depend on another field
+    var dependents = container.querySelectorAll('[data-depends-on]');
+    var controllers = {};
+    dependents.forEach(function (el) {
+        var key = el.getAttribute('data-depends-on');
+        if (!controllers[key]) controllers[key] = [];
+        controllers[key].push(el);
+    });
+
+    Object.keys(controllers).forEach(function (key) {
+        var ctrl = document.getElementById(key);
+        if (!ctrl) return;
+        var toggle = function () {
+            var checked = ctrl.checked;
+            controllers[key].forEach(function (el) {
+                el.style.display = checked ? '' : 'none';
+            });
+        };
+        toggle(); // set initial state
+        ctrl.addEventListener('change', toggle);
+    });
+}
+
 // Initialize on page load
 document.addEventListener('DOMContentLoaded', function () {
     initTomSelect();
+    initDependsOn();
 });
 
 // Re-initialize after HTMX swaps new content in
 document.addEventListener('htmx:afterSwap', function (event) {
     syncTomSelect(event.detail.target);
     initTomSelect(event.detail.target);
+    initDependsOn(event.detail.target);
 });
 
 // Handle out-of-band swaps (dependent dropdowns with multiple targets)
 document.addEventListener('htmx:oobAfterSwap', function (event) {
     syncTomSelect(event.detail.target);
     initTomSelect(event.detail.target);
+    initDependsOn(event.detail.target);
 });
 

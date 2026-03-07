@@ -478,6 +478,7 @@ Customize individual form fields with extra attributes or replace their type ent
 | `hx_target` | HTMX `hx-target` selector | `"hx_target": "#other_field"` |
 | `hx_trigger` | HTMX `hx-trigger` event (defaults to `"change"`) | `"hx_trigger": "change"` |
 | `hx_swap` | HTMX `hx-swap` strategy (defaults to `"innerHTML"`) | `"hx_swap": "outerHTML"` |
+| `depends_on` | Field key of a checkbox — this field is only visible when that checkbox is checked | `"depends_on": "is_ha"` |
 
 **Examples:**
 
@@ -514,6 +515,30 @@ class EdgeView(CRUDView):
         },
     }
 ```
+
+**Conditional field visibility:**
+
+Use `depends_on` to show fields only when a checkbox is checked. This is useful for toggling optional sections like HA (High Availability) settings:
+
+```python
+class LaunchPadView(CRUDView):
+    model = LaunchPad
+    form_widget_overrides = {
+        # These fields are hidden unless the "is_ha" checkbox is checked
+        "ha_mode": {
+            "depends_on": "is_ha",
+            "type": "select",
+            "choices": [("active-standby", "Active-Standby"), ("active-active", "Active-Active")],
+        },
+        "ha_switch_mode": {
+            "depends_on": "is_ha",
+            "type": "select",
+            "choices": [("manual", "Manual"), ("automatic", "Automatic")],
+        },
+    }
+```
+
+When `is_ha` is unchecked, the `ha_mode` and `ha_switch_mode` fields are hidden. When the user toggles it on, the fields appear instantly (no server round-trip).
 
 ### AJAX Select (Searchable Foreign Keys)
 

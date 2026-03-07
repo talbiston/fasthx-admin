@@ -1,4 +1,4 @@
-<div class="mb-3">
+<div class="mb-3"{% if field.get('depends_on') %} data-depends-on="{{ field.depends_on }}" style="display:none"{% endif %}>
     {% if field.type == 'checkbox' %}
     <div class="form-check form-switch">
         <input type="checkbox" name="{{ field.key }}" id="{{ field.key }}"
