@@ -2,6 +2,16 @@
 
 A modern admin interface framework for FastAPI built with HTMX, Jinja2, and Bootstrap 5. Designed as a drop-in replacement for Flask-Admin with full control over rendering.
 
+## Screenshots
+
+| List View | Form with Sections |
+|---|---|
+| ![List View](docs/screenshot-list.png) | ![Form View](docs/screenshot-form.png) |
+
+| Detail View | Toast Notifications |
+|---|---|
+| ![Detail View](docs/screenshot-detail.png) | ![Toast Notification](docs/screenshot-toast.png) |
+
 ## Table of Contents
 
 - [Features](#features)
