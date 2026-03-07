@@ -101,12 +101,15 @@ function getTomSelectOptions(el) {
     var placeholder = emptyOption ? emptyOption.textContent.trim() : 'Select...';
     // Remove the empty option so it doesn't show as a selectable item
     if (emptyOption) emptyOption.remove();
+    // Preserve any pre-selected value (edit forms), otherwise start empty for placeholder
+    var selectedOption = el.querySelector('option[selected]');
+    var items = selectedOption && selectedOption.value ? [selectedOption.value] : [];
     return {
         create: false,
         sortField: { field: 'text', direction: 'asc' },
         placeholder: placeholder,
         allowEmptyOption: false,
-        items: []  // Start with nothing selected so placeholder shows
+        items: items
     };
 }
 
