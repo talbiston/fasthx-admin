@@ -213,3 +213,9 @@ document.addEventListener('htmx:afterSwap', function (event) {
     initTomSelect(event.detail.target);
 });
 
+// Handle out-of-band swaps (dependent dropdowns with multiple targets)
+document.addEventListener('htmx:oobAfterSwap', function (event) {
+    syncTomSelect(event.detail.target);
+    initTomSelect(event.detail.target);
+});
+

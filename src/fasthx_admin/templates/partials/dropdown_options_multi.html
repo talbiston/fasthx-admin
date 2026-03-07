@@ -1,0 +1,12 @@
+<option value="">-- Select --</option>
+{% for opt in options %}
+<option value="{{ opt.id }}" {% if opt.id == selected %}selected{% endif %}>{{ opt.label }}</option>
+{% endfor %}
+{% for extra in oob_targets %}
+<select id="{{ extra.id }}" hx-swap-oob="innerHTML">
+<option value="">-- Select --</option>
+{% for opt in extra.options %}
+<option value="{{ opt.id }}" {% if opt.id == extra.selected %}selected{% endif %}>{{ opt.label }}</option>
+{% endfor %}
+</select>
+{% endfor %}

@@ -697,6 +697,8 @@ class EdgeView(CRUDView):
 
 A common pattern: selecting a value in one dropdown filters the options in another. This uses HTMX + `form_widget_overrides` + a custom endpoint.
 
+### Single Target
+
 **Step 1: Configure the trigger dropdown**
 
 ```python
@@ -727,6 +729,49 @@ class DeviceView(CRUDView):
 ```
 
 The `partials/dropdown_options.html` template renders `<option>` tags that replace the target `<select>`'s contents.
+
+### Multiple Targets
+
+To update multiple dropdowns from a single trigger, use `dropdown_options_multi.html` with HTMX out-of-band swaps. The primary target is updated normally, and additional targets are updated via `hx-swap-oob`.
+
+**Step 1: Configure the trigger dropdown** (same as single target — `hx_target` points to the primary target)
+
+```python
+class EdgeView(CRUDView):
+    model = Edge
+    form_widget_overrides = {
+        "customer_id": {
+            "hx_get": "/api/options-for-customer",
+            "hx_target": "#orchestrator_id",          # Primary target
+        },
+    }
+```
+
+**Step 2: Create the endpoint with `oob_targets`**
+
+```python
+    @CRUDView.endpoint("/api/options-for-customer", methods=["GET"], response_class=HTMLResponse)
+    async def options_for_customer(self, request: Request, customer_id: int = 0, db: Session = Depends(get_db)):
+        orch_options = []
+        region_options = []
+        if customer_id:
+            orchs = db.query(Orchestrator).filter(Orchestrator.customer_id == customer_id).all()
+            orch_options = [{"id": o.id, "label": o.name} for o in orchs]
+            regions = db.query(Region).filter(Region.customer_id == customer_id).all()
+            region_options = [{"id": r.id, "label": r.name} for r in regions]
+        return self.templates.TemplateResponse("partials/dropdown_options_multi.html", {
+            "request": request,
+            "options": orch_options,              # Primary target options
+            "selected": None,
+            "oob_targets": [                      # Additional targets (out-of-band)
+                {"id": "region_id", "options": region_options, "selected": None},
+                # Add more targets as needed:
+                # {"id": "another_field", "options": other_options, "selected": None},
+            ],
+        })
+```
+
+The response updates `#orchestrator_id` directly and swaps `#region_id` (and any other entries in `oob_targets`) out-of-band. TomSelect is automatically re-synced on all updated selects.
 
 ---
 
@@ -1375,7 +1420,8 @@ fasthx-admin ships with these built-in templates:
 | `partials/row_actions.html` | View/Edit/Delete + custom action buttons |
 | `partials/status_cell.html` | Status badge renderer (online/offline/deploying/error/etc.) |
 | `partials/_form_field.html` | Single form field renderer (text/select/checkbox/textarea) |
-| `partials/dropdown_options.html` | `<option>` tags for dependent dropdown responses |
+| `partials/dropdown_options.html` | `<option>` tags for single-target dependent dropdown responses |
+| `partials/dropdown_options_multi.html` | `<option>` tags with OOB swaps for multi-target dependent dropdowns |
 | `partials/progress_bar.html` | Animated deployment progress bar with auto-polling |
 | `partials/_wizard_indicators.html` | Wizard step progress indicators |
 | `partials/wizard_step.html` | Wizard step content (all 4 steps) |
