@@ -35,9 +35,10 @@
             {% if field.required %}required{% endif %}
             {% if field.get('hx_get') %}
             hx-get="{{ field.hx_get }}"
-            hx-trigger="change"
-            hx-target="{{ field.hx_target }}"
-            hx-include="this"
+            hx-trigger="{{ field.get('hx_trigger', 'change') }}"
+            hx-target="{{ field.get('hx_target', '') }}"
+            hx-swap="{{ field.get('hx_swap', 'innerHTML') }}"
+            {% if field.get('hx_trigger', 'change') != 'load' %}hx-include="this"{% endif %}
             {% endif %}>
         <option value="">-- Select --</option>
         {% if field.choices %}
