@@ -505,9 +505,46 @@ async def dashboard(request: Request, db: Session = Depends(get_db)):
         "total_orchestrators": db.query(Orchestrator).count(),
     }
 
+    dashboard_cards = [
+        {
+            "label": "Total Edges",
+            "value": total_edges,
+            "icon": "shield",
+            "link": "/edges",
+        },
+        {
+            "label": "Online",
+            "value": online,
+            "color": "text-success",
+            "icon": "check-circle",
+            "icon_color": "text-success",
+            "bg": "bg-success-subtle",
+            "link": "/edges?q=online",
+        },
+        {
+            "label": "Deploying",
+            "value": deploying,
+            "color": "text-warning",
+            "icon": "arrow-repeat",
+            "icon_color": "text-warning",
+            "bg": "bg-warning-subtle",
+            "link": "/edges?q=deploying",
+        },
+        {
+            "label": "Errors",
+            "value": error,
+            "color": "text-danger",
+            "icon": "exclamation-triangle",
+            "icon_color": "text-danger",
+            "bg": "bg-danger-subtle",
+            "link": "/edges?q=error",
+        },
+    ]
+
     return admin.templates.TemplateResponse("dashboard.html", {
         "request": request,
         "stats": stats,
+        "dashboard_cards": dashboard_cards,
         "recent_edges": recent_edges,
         "active_page": "dashboard",
     })

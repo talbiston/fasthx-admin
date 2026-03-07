@@ -4,6 +4,10 @@ A modern admin interface framework for FastAPI built with HTMX, Jinja2, and Boot
 
 ## Screenshots
 
+### Dashboard
+![Dashboard](docs/screenshot-dashboard.jpg)
+*Dashboard with clickable summary cards, recent items, and quick actions*
+
 ### List View
 ![List View](docs/screenshot-list.jpg)
 *List view with search, sorting, pagination, and row actions*
