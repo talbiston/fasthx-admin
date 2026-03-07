@@ -224,6 +224,14 @@ class CRUDView:
         for col in mapper.columns:
             for fk in col.foreign_keys:
                 self.foreign_keys[col.key] = fk
+                # Register FK target models that may not have their own CRUDView
+                target_table = fk.column.table
+                if target_table.name not in _model_registry:
+                    for rel in mapper.relationships:
+                        rel_mapper = rel.mapper
+                        if rel_mapper.local_table.name == target_table.name:
+                            _model_registry[target_table.name] = rel_mapper.class_
+                            break
 
         # Determine which columns to show in the list
         if self.column_list:
