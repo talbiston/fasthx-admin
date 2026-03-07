@@ -59,10 +59,7 @@ function showToast(detail) {
     }
 }
 
-// Handle toast triggers from HX-Trigger headers after HTMX settles the DOM.
-// For hx-boost requests the entire <body> is replaced, so we must defer
-// the toast creation until the new DOM (with a fresh #toast-container) is
-// fully in place.  A short setTimeout ensures we run after the swap.
+// For non-redirect responses, show the toast after the DOM swap.
 var _lastToastXhr = null;
 document.addEventListener('htmx:afterSettle', function (event) {
     var xhr = event.detail.xhr;
@@ -86,6 +83,15 @@ document.addEventListener('DOMContentLoaded', function () {
             bsAlert.close();
         }, 5000);
     });
+
+    // Show any toast passed via cookie (set by server before HX-Redirect)
+    var match = document.cookie.match(/(^|;\s*)_toast=([^;]*)/);
+    if (match) {
+        document.cookie = '_toast=; max-age=0; path=/; samesite=lax';
+        try {
+            showToast(JSON.parse(decodeURIComponent(match[2])));
+        } catch (e) {}
+    }
 });
 
 // Tom Select - searchable dropdowns for all select.form-select elements
@@ -201,3 +207,4 @@ document.addEventListener('htmx:afterSwap', function (event) {
     syncTomSelect(event.detail.target);
     initTomSelect(event.detail.target);
 });
+

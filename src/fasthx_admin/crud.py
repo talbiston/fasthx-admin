@@ -88,13 +88,27 @@ def toast_response(
         redirect: Optional URL — adds HX-Redirect header for page navigation after toast.
         status_code: HTTP status code (default 200).
     """
+    import urllib.parse
     toast_data: Dict[str, Any] = {"message": message, "type": type}
     if title:
         toast_data["title"] = title
-    headers = {"HX-Trigger": json.dumps({"showToast": toast_data})}
+    headers: Dict[str, str] = {}
     if redirect:
+        # When redirecting, pass the toast as a cookie so it survives the
+        # full page navigation triggered by HX-Redirect.
         headers["HX-Redirect"] = redirect
-    return HTMLResponse("", status_code=status_code, headers=headers)
+    else:
+        headers["HX-Trigger"] = json.dumps({"showToast": toast_data})
+    response = HTMLResponse("", status_code=status_code, headers=headers)
+    if redirect:
+        response.set_cookie(
+            "_toast",
+            urllib.parse.quote(json.dumps(toast_data)),
+            max_age=10,
+            httponly=False,
+            samesite="lax",
+        )
+    return response
 
 
 class CRUDView:
