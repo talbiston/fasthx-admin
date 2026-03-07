@@ -5,19 +5,19 @@ A modern admin interface framework for FastAPI built with HTMX, Jinja2, and Boot
 ## Screenshots
 
 ### List View
-![List View](docs/screenshot-list.png)
+![List View](docs/screenshot-list.jpg)
 *List view with search, sorting, pagination, and row actions*
 
 ### Form with Sections
-![Form View](docs/screenshot-form.png)
+![Form View](docs/screenshot-form.jpg)
 *Create/edit form with accordion sections and AJAX select fields*
 
 ### Detail View
-![Detail View](docs/screenshot-detail.png)
+![Detail View](docs/screenshot-detail.jpg)
 *Detail view with formatted fields*
 
 ### Toast Notifications
-![Toast Notification](docs/screenshot-toast.png)
+![Toast Notification](docs/screenshot-toast.jpg)
 *Toast notifications for validation errors and action feedback*
 
 ## Table of Contents
