@@ -28,6 +28,7 @@ ALLOWED_GROUPS: list[str] = [
     "/Edge-Admins",
     "/Edge-Support",
     "/UCPE Admins",
+    "/edge_admins"
 ]
 
 # ---------------------------------------------------------------------------
