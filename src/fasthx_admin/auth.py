@@ -27,24 +27,30 @@ AUTH_DISABLED = os.environ.get("AUTH_DISABLED", "").lower() in ("1", "true", "ye
 # OIDC secrets
 # ---------------------------------------------------------------------------
 
-_secrets: dict | None = None
+DEFAULT_SECRETS_FILENAME = "client_secrets.json"
 
 
-def _load_secrets() -> dict:
-    """Load OIDC client secrets (same JSON format as old-ui docker/client_secrets.json)."""
-    global _secrets
-    if _secrets is not None:
-        return _secrets
+def _load_secrets(path: str | os.PathLike | None = None) -> dict:
+    """Load OIDC client secrets from a JSON file.
 
-    secrets_path = os.environ.get(
-        "OIDC_SECRETS", str(Path.cwd() / "client_secrets.json")
+    Path resolution order: explicit ``path`` argument → ``OIDC_SECRETS`` env
+    var → ``client_secrets.json`` in the current working directory. This lets
+    the consuming project point at its own secrets file rather than assuming a
+    fixed location.
+
+    Supports both a top-level object and the nested ``{"web": {...}}`` format
+    used by Keycloak client exports.
+    """
+    secrets_path = (
+        path
+        or os.environ.get("OIDC_SECRETS")
+        or (Path.cwd() / DEFAULT_SECRETS_FILENAME)
     )
     with open(secrets_path) as f:
         data = json.load(f)
 
     # Support both top-level and nested {"web": {...}} format
-    _secrets = data.get("web", data)
-    return _secrets
+    return data.get("web", data)
 
 
 # ---------------------------------------------------------------------------
@@ -61,15 +67,21 @@ class OidcAuthenticator:
         self,
         allowed_groups: list[str] | None = None,
         secrets: dict | None = None,
+        secrets_path: str | os.PathLike | None = None,
     ) -> None:
         """Initialize the OIDC authenticator instance.
 
         ``allowed_groups`` is supplied by the consuming application. When empty
         or ``None``, any successfully authenticated user is allowed (no group
-        restriction). ``secrets`` may be passed explicitly; otherwise they are
-        loaded from the OIDC client secrets file.
+        restriction).
+
+        Secrets can be supplied three ways, in order of precedence:
+          1. ``secrets`` — a fully-formed secrets dict (no file needed).
+          2. ``secrets_path`` — path to a client secrets JSON file.
+          3. Neither — fall back to the ``OIDC_SECRETS`` env var or
+             ``client_secrets.json`` in the current working directory.
         """
-        self._secrets = secrets or _load_secrets()
+        self._secrets = secrets if secrets is not None else _load_secrets(secrets_path)
         if not self._secrets:
             raise AuthError("Failed to load OIDC client secrets")
         self.allowed_groups = allowed_groups or []
