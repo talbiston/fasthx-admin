@@ -23,7 +23,7 @@ from fastapi.responses import HTMLResponse, RedirectResponse, StreamingResponse
 from sqlalchemy.orm import Session
 from starlette.middleware.sessions import SessionMiddleware
 
-from fasthx_admin import Admin, CRUDView, Base, init_db, get_db, get_current_user, oidc_login, AuthError, tool_registry, toast_response, console_response, console_sse_message, ValidationError
+from fasthx_admin import Admin, CRUDView, Base, init_db, get_db, get_current_user, OidcAuthenticator, AuthError, tool_registry, toast_response, console_response, console_sse_message, ValidationError
 
 from models import Customer, Orchestrator, FortiEdge, BuildStatus, EdgeStatus
 
@@ -51,6 +51,17 @@ app.add_middleware(SessionMiddleware, secret_key=SECRET_KEY)
 # --- Admin setup ---
 
 admin = Admin(app, title="Admin Demo", ai_chat=True)
+
+# OIDC authenticator — the app owns the list of authorized groups.
+authenticator = OidcAuthenticator(
+    allowed_groups=[
+        "/sdn.automation",
+        "/Edge-Admins",
+        "/Edge-Support",
+        "/UCPE Admins",
+        "/edge_admins",
+    ],
+)
 
 
 # --- AI Chat Tools ---
@@ -605,7 +616,7 @@ async def login_submit(request: Request):
         })
 
     try:
-        user = oidc_login(username, password)
+        user = authenticator.oidc_login(username, password)
     except AuthError as e:
         return admin.templates.TemplateResponse("login.html", {
             "request": request,

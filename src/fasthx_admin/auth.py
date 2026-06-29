@@ -23,14 +23,6 @@ log = logging.getLogger(__name__)
 
 AUTH_DISABLED = os.environ.get("AUTH_DISABLED", "").lower() in ("1", "true", "yes")
 
-ALLOWED_GROUPS: list[str] = [
-    "/sdn.automation",
-    "/Edge-Admins",
-    "/Edge-Support",
-    "/UCPE Admins",
-    "/edge_admins"
-]
-
 # ---------------------------------------------------------------------------
 # OIDC secrets
 # ---------------------------------------------------------------------------
@@ -63,75 +55,95 @@ def _load_secrets() -> dict:
 class AuthError(Exception):
     """Raised when OIDC authentication fails."""
 
+class OidcAuthenticator:
 
-def oidc_login(username: str, password: str) -> dict:
-    """Exchange credentials for tokens via Keycloak, fetch userinfo, check groups.
+    def __init__(
+        self,
+        allowed_groups: list[str] | None = None,
+        secrets: dict | None = None,
+    ) -> None:
+        """Initialize the OIDC authenticator instance.
 
-    Returns ``{"username": ..., "groups": [...]}`` on success.
-    Raises ``AuthError`` with a user-friendly message on failure.
-    """
-    secrets = _load_secrets()
-    log.info("OIDC login attempt for user=%s", username)
-    log.debug("token_uri=%s  client_id=%s", secrets.get("token_uri"), secrets.get("client_id"))
+        ``allowed_groups`` is supplied by the consuming application. When empty
+        or ``None``, any successfully authenticated user is allowed (no group
+        restriction). ``secrets`` may be passed explicitly; otherwise they are
+        loaded from the OIDC client secrets file.
+        """
+        self._secrets = secrets or _load_secrets()
+        if not self._secrets:
+            raise AuthError("Failed to load OIDC client secrets")
+        self.allowed_groups = allowed_groups or []
 
-    # 1. Token request (Resource Owner Password Credentials grant)
-    try:
-        token_resp = requests.post(
-            secrets["token_uri"],
-            data={
-                "grant_type": "password",
-                "client_id": secrets["client_id"],
-                "client_secret": secrets["client_secret"],
-                "scope": "openid",
-                "username": username,
-                "password": password,
-            },
-            timeout=10,
-        )
-    except requests.RequestException as exc:
-        log.error("Token request failed (network): %s", exc)
-        raise AuthError(f"Cannot reach Keycloak: {exc}")
 
-    log.info("Token response: status=%s", token_resp.status_code)
-    log.debug("Token response body: %s", token_resp.text[:500])
+    def oidc_login(self, username: str, password: str) -> dict:
 
-    if token_resp.status_code != 200:
-        detail = token_resp.json().get("error_description", "Invalid credentials")
-        log.warning("Token request rejected: %s", detail)
-        raise AuthError(detail)
+        """Exchange credentials for tokens via Keycloak, fetch userinfo, check groups.
 
-    access_token = token_resp.json()["access_token"]
+        Returns ``{"username": ..., "groups": [...]}`` on success.
+        Raises ``AuthError`` with a user-friendly message on failure.
+        """
+        secrets = self._secrets
+        log.info("OIDC login attempt for user=%s", username)
+        log.debug("token_uri=%s  client_id=%s", secrets.get("token_uri"), secrets.get("client_id"))
 
-    # 2. Userinfo request
-    try:
-        userinfo_resp = requests.get(
-            secrets["userinfo_uri"],
-            headers={"Authorization": f"Bearer {access_token}"},
-            timeout=10,
-        )
-    except requests.RequestException as exc:
-        log.error("Userinfo request failed (network): %s", exc)
-        raise AuthError(f"Cannot reach Keycloak userinfo: {exc}")
+        # 1. Token request (Resource Owner Password Credentials grant)
+        try:
+            token_resp = requests.post(
+                secrets["token_uri"],
+                data={
+                    "grant_type": "password",
+                    "client_id": secrets["client_id"],
+                    "client_secret": secrets["client_secret"],
+                    "scope": "openid",
+                    "username": username,
+                    "password": password,
+                },
+                timeout=10,
+            )
+        except requests.RequestException as exc:
+            log.error("Token request failed (network): %s", exc)
+            raise AuthError(f"Cannot reach Keycloak: {exc}")
 
-    log.info("Userinfo response: status=%s", userinfo_resp.status_code)
-    log.debug("Userinfo body: %s", userinfo_resp.text[:500])
+        log.info("Token response: status=%s", token_resp.status_code)
+        log.debug("Token response body: %s", token_resp.text[:500])
 
-    if userinfo_resp.status_code != 200:
-        raise AuthError("Failed to retrieve user information")
+        if token_resp.status_code != 200:
+            detail = token_resp.json().get("error_description", "Invalid credentials")
+            log.warning("Token request rejected: %s", detail)
+            raise AuthError(detail)
 
-    userinfo = userinfo_resp.json()
-    groups: list[str] = userinfo.get("member_of", [])
-    log.info("User groups: %s", groups)
+        access_token = token_resp.json()["access_token"]
 
-    # 3. Group check
-    if not any(g in ALLOWED_GROUPS for g in groups):
-        log.warning("User %s not in allowed groups. Has: %s", username, groups)
-        raise AuthError("You are not a member of an authorized group")
+        # 2. Userinfo request
+        try:
+            userinfo_resp = requests.get(
+                secrets["userinfo_uri"],
+                headers={"Authorization": f"Bearer {access_token}"},
+                timeout=10,
+            )
+        except requests.RequestException as exc:
+            log.error("Userinfo request failed (network): %s", exc)
+            raise AuthError(f"Cannot reach Keycloak userinfo: {exc}")
 
-    return {
-        "username": userinfo.get("preferred_username", username),
-        "groups": groups,
-    }
+        log.info("Userinfo response: status=%s", userinfo_resp.status_code)
+        log.debug("Userinfo body: %s", userinfo_resp.text[:500])
+
+        if userinfo_resp.status_code != 200:
+            raise AuthError("Failed to retrieve user information")
+
+        userinfo = userinfo_resp.json()
+        groups: list[str] = userinfo.get("member_of", [])
+        log.info("User groups: %s", groups)
+
+        # 3. Group check (skipped when no allowed_groups configured)
+        if self.allowed_groups and not any(g in self.allowed_groups for g in groups):
+            log.warning("User %s not in allowed groups. Has: %s", username, groups)
+            raise AuthError("You are not a member of an authorized group")
+
+        return {
+            "username": userinfo.get("preferred_username", username),
+            "groups": groups,
+        }
 
 
 # ---------------------------------------------------------------------------
