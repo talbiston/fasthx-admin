@@ -838,6 +838,7 @@ class CRUDView:
     category = None
     icon = None
     column_list = None
+    column_export_list = None
     column_exclude = None
     column_labels = None
     column_formatters = None
@@ -978,6 +979,21 @@ class CRUDView:
                         "type": col_type,
                         "sortable": False,  # relationship traversal not sortable at DB level
                     })
+
+        # Build export column metadata. Defaults to the list-view columns, but
+        # column_export_list overrides for exports only — it may include or reorder
+        # columns that are not shown in the list view (Flask-Admin parity).
+        if self.column_export_list:
+            self.export_columns_meta = []
+            for key in self.column_export_list:
+                rel_key = key.split(".")[0]
+                default_label = key.replace(".", " ").replace("_", " ").title()
+                label = self.column_labels.get(
+                    key, self.column_labels.get(rel_key, default_label)
+                )
+                self.export_columns_meta.append({"key": key, "label": label})
+        else:
+            self.export_columns_meta = self.columns_meta
 
         # Build detail view metadata (all columns by default, or detail_columns if set)
         detail_keys = self.detail_columns or all_columns
@@ -1796,8 +1812,8 @@ class CRUDView:
                 items = query.all()
 
                 # Get column keys and labels
-                col_keys = [c["key"] for c in view.columns_meta]
-                col_labels = [c["label"] for c in view.columns_meta]
+                col_keys = [c["key"] for c in view.export_columns_meta]
+                col_labels = [c["label"] for c in view.export_columns_meta]
 
                 # Build rows of raw values
                 rows_data = []
