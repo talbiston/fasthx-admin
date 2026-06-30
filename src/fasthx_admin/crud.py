@@ -891,10 +891,9 @@ class CRUDView:
 
         # Resolve mutable defaults (None -> empty collection)
         self.column_formatters = self.column_formatters or {}
-        # Export formatters default to the regular column_formatters when unset
-        # (mirrors Flask-Admin's column_formatters_export fallback behaviour).
-        if self.column_formatters_export is None:
-            self.column_formatters_export = self.column_formatters
+        # Export formatters are opt-in only — unlike Flask-Admin, they do NOT
+        # fall back to column_formatters, so exports stay raw unless explicitly set.
+        self.column_formatters_export = self.column_formatters_export or {}
         self.column_labels = self.column_labels or {}
         self.form_widget_overrides = self.form_widget_overrides or {}
         self.form_ajax_refs = self.form_ajax_refs or {}
