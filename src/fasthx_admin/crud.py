@@ -841,6 +841,7 @@ class CRUDView:
     column_exclude = None
     column_labels = None
     column_formatters = None
+    column_formatters_export = None
     column_searchable = None
     column_sortable = None
     form_columns = None
@@ -890,6 +891,10 @@ class CRUDView:
 
         # Resolve mutable defaults (None -> empty collection)
         self.column_formatters = self.column_formatters or {}
+        # Export formatters default to the regular column_formatters when unset
+        # (mirrors Flask-Admin's column_formatters_export fallback behaviour).
+        if self.column_formatters_export is None:
+            self.column_formatters_export = self.column_formatters
         self.column_labels = self.column_labels or {}
         self.form_widget_overrides = self.form_widget_overrides or {}
         self.form_ajax_refs = self.form_ajax_refs or {}
@@ -1797,12 +1802,14 @@ class CRUDView:
 
                 # Build rows of raw values
                 rows_data = []
+                export_formatters = view.column_formatters_export
                 for item in items:
                     row = []
                     for key in col_keys:
                         value = _resolve_dotted(item, key)
-                        if value is None:
-                            value = ""
+                        formatter = export_formatters.get(key)
+                        if formatter is not None:
+                            value = formatter(value, item)
                         elif hasattr(value, "value"):
                             value = value.value
                         if value is None:
