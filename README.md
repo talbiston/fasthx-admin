@@ -93,6 +93,12 @@ With AI chat support (adds `httpx`):
 pip install fasthx-admin[ai]
 ```
 
+With XLSX export support (adds `openpyxl`):
+
+```bash
+pip install fasthx-admin[xlsx]
+```
+
 With development extras (uvicorn, pytest, httpx):
 
 ```bash
@@ -366,7 +372,14 @@ class DeviceView(CRUDView):
 
     # Restrict which columns are sortable (default: all columns)
     column_sortable = ["id", "hostname", "status"]
+
+    # Override which columns are included in data exports (default: column_list).
+    # May include or reorder columns that are NOT shown in the list view,
+    # including dotted relationship paths.
+    column_export_list = ["id", "hostname", "ip_address", "status", "site.name"]
 ```
+
+> **`column_export_list`** only affects CSV/XLSX exports (see [Export](#export)). When unset, exports use `column_list`. A column that appears *only* in `column_export_list` is exported but not shown in the list table.
 
 ### Column Formatters
 
@@ -408,6 +421,28 @@ class DeviceView(CRUDView):
 ```
 
 Formatters return raw HTML strings. The templates render them with `| safe` so Bootstrap classes, icons, and links all work.
+
+#### Export formatters (`column_formatters_export`)
+
+`column_formatters` produce HTML for the browser, which is rarely what you want inside a CSV or spreadsheet cell. Use `column_formatters_export` to apply plain-text formatting during exports. Formatters use the same `(value, obj)` signature.
+
+```python
+class DeviceView(CRUDView):
+    model = Device
+    export_types = ["csv", "xlsx"]
+
+    # HTML badge in the list view
+    column_formatters = {
+        "status": format_status_badge,
+    }
+
+    # Plain text in the export — overrides column_formatters for this column
+    column_formatters_export = {
+        "status": lambda value, obj: value.value if hasattr(value, "value") else str(value),
+    }
+```
+
+**Opt-in only.** Unlike Flask-Admin, `column_formatters_export` does **not** fall back to `column_formatters`. Any column without an entry here is exported raw (enum values are unwrapped, `None` becomes an empty string). This keeps display HTML out of your exports unless you explicitly ask for a formatter.
 
 ### Form Configuration
 
@@ -999,7 +1034,7 @@ class CustomerView(CRUDView):
 
 This adds an "Export" dropdown next to the Create button in the list view. The export:
 
-- Uses the columns defined in `column_list` with labels from `column_labels` as headers
+- Uses the columns defined in `column_list` (or `column_export_list`, if set) with labels from `column_labels` as headers
 - Respects the current search query and sort order
 - Downloads all matching records (not just the current page)
 
@@ -1008,9 +1043,33 @@ This adds an "Export" dropdown next to the Create button in the list view. The e
 | Format | Dependency |
 |---|---|
 | `csv` | None (built-in) |
-| `xlsx` | `openpyxl` (`pip install openpyxl`) |
+| `xlsx` | `openpyxl` — install with `pip install fasthx-admin[xlsx]` or `pip install openpyxl` |
 
 The export endpoint is at `/{name}/export/{format}` and accepts the same `q`, `sort`, and `order` query params as the list view.
+
+### Controlling exported columns and values
+
+Two attributes tailor exports independently of the list view:
+
+```python
+class CustomerView(CRUDView):
+    model = Customer
+    export_types = ["csv", "xlsx"]
+
+    column_list = ["id", "name", "status"]                 # shown in the list table
+
+    # Export a different / wider set of columns (supports dotted relationships).
+    # Columns here that aren't in column_list are exported but not shown on screen.
+    column_export_list = ["id", "name", "status", "email", "region.name"]
+
+    # Plain-text formatting for export cells (opt-in; does not inherit column_formatters)
+    column_formatters_export = {
+        "status": lambda value, obj: value.value if hasattr(value, "value") else str(value),
+    }
+```
+
+- **`column_export_list`** — overrides `column_list` for exports only. Defaults to `column_list` when unset.
+- **`column_formatters_export`** — opt-in plain-text formatters (see [Export formatters](#export-formatters-column_formatters_export)). Columns without an entry are exported raw.
 
 ---
 
@@ -2571,7 +2630,9 @@ fasthx-admin is designed as a drop-in conceptual replacement for Flask-Admin. He
 | `ModelView` | `CRUDView` subclass | Same pattern: subclass + class attributes |
 | `admin.add_view(MyView(Model, db.session))` | `admin.add_view(MyView)` | No session arg needed; uses `get_db` dependency |
 | `column_formatters` | `column_formatters` | Same API: `{col: fn(value, obj) -> html}` |
+| `column_formatters_export` | `column_formatters_export` | Same API; **opt-in only** — does not fall back to `column_formatters` |
 | `column_list` | `column_list` | Identical |
+| `column_export_list` | `column_export_list` | Overrides `column_list` for exports; defaults to `column_list` |
 | `column_labels` | `column_labels` | Identical |
 | `column_searchable_list` | `column_searchable` | Renamed |
 | `column_sortable_list` | `column_sortable` | Renamed |
@@ -2586,7 +2647,7 @@ fasthx-admin is designed as a drop-in conceptual replacement for Flask-Admin. He
 | `on_model_delete(model)` | `on_model_delete(item, db)` | Same concept; db session passed explicitly |
 | `after_model_delete(model)` | `after_model_delete(item, db)` | Same concept |
 | `column_filters` | `column_filters` | List of column names for filter dropdowns |
-| `column_export_list` | `export_types` | List of format strings (`["csv", "xlsx"]`) |
+| `can_export` / export action | `export_types` | List of format strings (`["csv", "xlsx"]`) |
 | `@expose()` custom endpoints | `setup_endpoints()` override | Define on `self.router` |
 | `Markup()` in formatters | Raw HTML strings | Templates use `\| safe` filter |
 
