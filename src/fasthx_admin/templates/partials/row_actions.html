@@ -16,17 +16,27 @@
         </li>
         {% endif %}
         {% for action in row_actions %}
+        {% set has_confirm = action.get('confirm') or action.get('confirm_title') or action.get('confirm_lines') or action.get('confirm_prompt') %}
+        {% set confirm_fallback = action.get('confirm_prompt') or action.get('confirm') or action.get('confirm_title') %}
         <li>
             {% if action.get('href') %}
-            <a href="{{ action.href | replace('{id}', row._id|string) }}" class="dropdown-item"
+            <a href="{{ action.href | replace('{id}', row._id|string) }}" class="dropdown-item{% if action.get('class') %} {{ action.class }}{% endif %}"
                {% if action.get('download') %}download{% endif %}
                {% if action.get('target') %}target="{{ action.target }}"{% endif %}
-               {% if action.get('confirm') %}onclick="return confirm('{{ action.confirm }}')"{% endif %}>
+               {% if has_confirm %}
+               data-confirm-title="{{ action.get('confirm_title', '') }}"
+               {% if action.get('confirm_lines') %}data-confirm-lines='{{ action.confirm_lines | tojson }}'{% endif %}
+               {% if action.get('confirm') %}data-confirm="{{ action.confirm }}"{% endif %}
+               {% if action.get('confirm_prompt') %}data-confirm-prompt="{{ action.confirm_prompt }}"{% endif %}
+               {% if action.get('confirm_danger') %}data-confirm-danger="1"{% endif %}
+               {% if action.get('confirm_ok_label') %}data-confirm-ok="{{ action.confirm_ok_label }}"{% endif %}
+               {% if action.get('confirm_cancel_label') %}data-confirm-cancel="{{ action.confirm_cancel_label }}"{% endif %}
+               {% endif %}>
                 {% if action.get('icon') %}<i class="bi bi-{{ action.icon }}"></i>{% endif %}
                 {{ action.label }}
             </a>
             {% else %}
-            <button class="dropdown-item"
+            <button class="dropdown-item{% if action.get('class') %} {{ action.class }}{% endif %}"
                     {% if action.get('hx_get') %}
                     hx-get="{{ action.hx_get | replace('{id}', row._id|string) }}"
                     {% elif action.get('hx_post') %}
@@ -39,8 +49,15 @@
                     {% if action.get('loading') %}
                     data-loading="true"
                     {% endif %}
-                    {% if action.get('confirm') %}
-                    hx-confirm="{{ action.confirm }}"
+                    {% if has_confirm %}
+                    hx-confirm="{{ confirm_fallback }}"
+                    data-confirm-title="{{ action.get('confirm_title', '') }}"
+                    {% if action.get('confirm_lines') %}data-confirm-lines='{{ action.confirm_lines | tojson }}'{% endif %}
+                    {% if action.get('confirm') %}data-confirm="{{ action.confirm }}"{% endif %}
+                    {% if action.get('confirm_prompt') %}data-confirm-prompt="{{ action.confirm_prompt }}"{% endif %}
+                    {% if action.get('confirm_danger') %}data-confirm-danger="1"{% endif %}
+                    {% if action.get('confirm_ok_label') %}data-confirm-ok="{{ action.confirm_ok_label }}"{% endif %}
+                    {% if action.get('confirm_cancel_label') %}data-confirm-cancel="{{ action.confirm_cancel_label }}"{% endif %}
                     {% endif %}>
                 {% if action.get('icon') %}<i class="bi bi-{{ action.icon }}"></i>{% endif %}
                 {{ action.label }}
@@ -55,7 +72,11 @@
                     hx-post="/{{ view.name }}/{{ row._id }}/delete"
                     hx-target="closest tr"
                     hx-swap="outerHTML"
-                    hx-confirm="Are you sure you want to delete this record?">
+                    hx-confirm="Are you sure you want to delete this record?"
+                    data-confirm-title="Delete record?"
+                    data-confirm="This will permanently delete this record. This action cannot be undone."
+                    data-confirm-danger="1"
+                    data-confirm-ok="Delete">
                 <i class="bi bi-trash"></i> Delete
             </button>
         </li>

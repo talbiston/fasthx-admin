@@ -74,6 +74,132 @@ function showModal(detail) {
     modal.show();
 }
 
+// ---------------------------------------------------------------------------
+// Rich confirm dialogs for row actions
+//
+// Reads data-confirm-* attributes emitted by partials/row_actions.html and
+// shows a Bootstrap modal instead of the native confirm() popup. Buttons flow
+// through HTMX's htmx:confirm event; links are intercepted on click. Both fall
+// back to native confirm() (via hx-confirm / this handler) if the modal element
+// is missing, so behavior degrades gracefully without JS.
+// ---------------------------------------------------------------------------
+
+// Extract a normalized confirm config from an element's data-confirm-* attrs.
+// Returns null when no confirm is configured (caller should not intercept).
+function readConfirmConfig(el) {
+    if (!el || !el.getAttribute) return null;
+    var title = el.getAttribute('data-confirm-title');
+    var prompt = el.getAttribute('data-confirm-prompt');
+    var simple = el.getAttribute('data-confirm');
+    var linesRaw = el.getAttribute('data-confirm-lines');
+    var lines = [];
+    if (linesRaw) {
+        try {
+            var parsed = JSON.parse(linesRaw);
+            lines = Array.isArray(parsed) ? parsed : [String(parsed)];
+        } catch (e) {
+            lines = [linesRaw];
+        }
+    }
+    // Nothing configured on this element — leave it to default handling.
+    if (title == null && prompt == null && simple == null && !lines.length) return null;
+    return {
+        title: title || 'Confirm',
+        // Fall back to the simple one-liner when no explicit lines were given.
+        lines: lines.length ? lines : (simple ? [simple] : []),
+        prompt: prompt || '',
+        danger: el.hasAttribute('data-confirm-danger'),
+        okLabel: el.getAttribute('data-confirm-ok') || 'Confirm',
+        cancelLabel: el.getAttribute('data-confirm-cancel') || 'Cancel'
+    };
+}
+
+// Show the confirm modal for cfg, invoking onConfirm() when the user accepts.
+// Falls back to a native confirm() if the modal element isn't in the DOM.
+function showConfirmDialog(cfg, onConfirm) {
+    var modalEl = document.getElementById('confirm-modal');
+    if (!modalEl || typeof bootstrap === 'undefined') {
+        var msg = [cfg.title]
+            .concat(cfg.lines, cfg.prompt ? [cfg.prompt] : [])
+            .filter(Boolean)
+            .join('\n');
+        if (confirm(msg)) onConfirm();
+        return;
+    }
+
+    modalEl.querySelector('.confirm-modal-heading').textContent = cfg.title;
+
+    var icon = modalEl.querySelector('.confirm-modal-icon');
+    if (icon) {
+        icon.className = 'bi confirm-modal-icon me-2 ' + (cfg.danger
+            ? 'bi-exclamation-triangle-fill text-danger'
+            : 'bi-question-circle-fill text-primary');
+    }
+
+    var body = modalEl.querySelector('.confirm-modal-body');
+    body.innerHTML = '';
+    cfg.lines.forEach(function (line) {
+        var p = document.createElement('p');
+        p.className = 'mb-2';
+        p.textContent = line;
+        body.appendChild(p);
+    });
+    if (cfg.prompt) {
+        var pr = document.createElement('p');
+        pr.className = 'fw-semibold mb-0 mt-3';
+        pr.textContent = cfg.prompt;
+        body.appendChild(pr);
+    }
+
+    var cancelBtn = modalEl.querySelector('.confirm-modal-cancel');
+    if (cancelBtn) cancelBtn.textContent = cfg.cancelLabel;
+
+    var modal = bootstrap.Modal.getOrCreateInstance(modalEl);
+
+    // Replace the OK button to drop any listener bound by a previous open.
+    var okBtn = modalEl.querySelector('.confirm-modal-ok');
+    var freshOk = okBtn.cloneNode(true);
+    freshOk.className = 'btn confirm-modal-ok ' + (cfg.danger ? 'btn-danger' : 'btn-primary');
+    freshOk.textContent = cfg.okLabel;
+    okBtn.parentNode.replaceChild(freshOk, okBtn);
+    freshOk.addEventListener('click', function () {
+        modal.hide();
+        onConfirm();
+    });
+
+    modal.show();
+}
+
+// Buttons: HTMX fires htmx:confirm before every request. Intercept when the
+// element carries our data-confirm-* config; otherwise let HTMX proceed (which
+// still honors a plain hx-confirm for e.g. the Delete action).
+document.addEventListener('htmx:confirm', function (evt) {
+    var cfg = readConfirmConfig(evt.detail.elt);
+    if (!cfg) return;
+    evt.preventDefault();
+    showConfirmDialog(cfg, function () { evt.detail.issueRequest(true); });
+});
+
+// Links: plain <a> navigations don't go through HTMX, so intercept the click.
+document.addEventListener('click', function (evt) {
+    if (!evt.target.closest) return;
+    var el = evt.target.closest('a[data-confirm], a[data-confirm-title], a[data-confirm-lines], a[data-confirm-prompt]');
+    if (!el) return;
+    var cfg = readConfirmConfig(el);
+    if (!cfg) return;
+    evt.preventDefault();
+    showConfirmDialog(cfg, function () {
+        // Re-issue the navigation/download without re-triggering the confirm.
+        var a = document.createElement('a');
+        a.href = el.href;
+        if (el.hasAttribute('download')) a.download = el.getAttribute('download') || '';
+        if (el.getAttribute('target')) a.target = el.getAttribute('target');
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+    });
+});
+
 // Dedup guard — prevent double-firing from both native event and afterSettle fallback.
 var _toastHandled = null;
 

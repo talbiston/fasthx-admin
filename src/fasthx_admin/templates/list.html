@@ -60,7 +60,13 @@
                 <li>
                     <button class="dropdown-item multi-row-action {{ action.get('class', '') }}"
                             data-url="{{ action.hx_post }}"
-                            {% if action.get('confirm') %}data-confirm="{{ action.confirm }}"{% endif %}>
+                            {% if action.get('confirm_title') %}data-confirm-title="{{ action.confirm_title }}"{% endif %}
+                            {% if action.get('confirm_lines') %}data-confirm-lines='{{ action.confirm_lines | tojson }}'{% endif %}
+                            {% if action.get('confirm') %}data-confirm="{{ action.confirm }}"{% endif %}
+                            {% if action.get('confirm_prompt') %}data-confirm-prompt="{{ action.confirm_prompt }}"{% endif %}
+                            {% if action.get('confirm_danger') %}data-confirm-danger="1"{% endif %}
+                            {% if action.get('confirm_ok_label') %}data-confirm-ok="{{ action.confirm_ok_label }}"{% endif %}
+                            {% if action.get('confirm_cancel_label') %}data-confirm-cancel="{{ action.confirm_cancel_label }}"{% endif %}>
                         {% if action.get('icon') %}<i class="bi bi-{{ action.icon }}"></i>{% endif %}
                         {{ action.label }}
                     </button>
@@ -169,24 +175,18 @@
                     {% endif %}
                     {% for col in columns %}
                     <th style="padding: 0.25rem 0.5rem;">
-                        {% set hf_key = namespace(val='') %}
-                        {% for hf in view.column_header_filters %}
-                        {% if hf == col.key or hf.startswith(col.key ~ '.') %}
-                        {% set hf_key.val = hf %}
-                        {% endif %}
-                        {% endfor %}
-                        {% if hf_key.val %}
+                        {% for hf in view.header_filter_map.get(col.key, []) %}
                         <input type="text"
-                               class="form-control form-control-sm cf-input"
-                               name="cf_{{ hf_key.val }}"
+                               class="form-control form-control-sm cf-input{% if not loop.last %} mb-1{% endif %}"
+                               name="cf_{{ hf }}"
                                placeholder="Filter..."
-                               value="{{ header_filter_values.get(hf_key.val, '') }}"
+                               value="{{ header_filter_values.get(hf, '') }}"
                                hx-get="/{{ view.name }}?partial=1"
                                hx-trigger="keyup changed delay:300ms"
                                hx-target="#table-body"
                                hx-include=".cf-input, [name='q']"
                                style="font-size: 0.8em;">
-                        {% endif %}
+                        {% endfor %}
                     </th>
                     {% endfor %}
                 </tr>
@@ -600,34 +600,55 @@
     for (var i = 0; i < actionBtns.length; i++) {
         actionBtns[i].addEventListener('click', function(e) {
             e.preventDefault();
-            var url = this.getAttribute('data-url');
-            var confirm_msg = this.getAttribute('data-confirm');
+            var btn = this;
+            var url = btn.getAttribute('data-url');
             var ids = Array.from(idSet);
             if (ids.length === 0) return;
             if (ids.length > SELECT_LIMIT) {
                 alert('Selection too large: ' + ids.length + ' items. Maximum is ' + SELECT_LIMIT + ' per action.');
                 return;
             }
-            if (confirm_msg && !confirm(confirm_msg.replace('{count}', ids.length))) return;
 
-            var formData = new FormData();
-            formData.append('ids', ids.join(','));
-            fetch(url, { method: 'POST', body: formData }).then(function(resp) {
-                if (!resp.ok) {
-                    alert('Action failed (' + resp.status + ' ' + resp.statusText + ')');
-                    return;
-                }
-                /* Action ran — stored ids may now reference deleted/changed rows. */
-                if (crossPage) sessionStorage.removeItem(storageKey);
-                /* Honor the framework's HX-Redirect idiom: single-row actions
-                   fire through HTMX which follows this header, but multi-row
-                   actions use a plain fetch() and must follow it manually. The
-                   accompanying _toast cookie is popped by app.js after nav. */
-                var dest = resp.headers.get('HX-Redirect');
-                if (dest) { window.location.href = dest; } else { window.location.reload(); }
-            }).catch(function(err) {
-                alert('Action failed: ' + (err && err.message ? err.message : 'network error'));
-            });
+            /* The actual POST — gated behind the confirm dialog below. */
+            var runAction = function() {
+                var formData = new FormData();
+                formData.append('ids', ids.join(','));
+                fetch(url, { method: 'POST', body: formData }).then(function(resp) {
+                    if (!resp.ok) {
+                        alert('Action failed (' + resp.status + ' ' + resp.statusText + ')');
+                        return;
+                    }
+                    /* Action ran — stored ids may now reference deleted/changed rows. */
+                    if (crossPage) sessionStorage.removeItem(storageKey);
+                    /* Honor the framework's HX-Redirect idiom: single-row actions
+                       fire through HTMX which follows this header, but multi-row
+                       actions use a plain fetch() and must follow it manually. The
+                       accompanying _toast cookie is popped by app.js after nav. */
+                    var dest = resp.headers.get('HX-Redirect');
+                    if (dest) { window.location.href = dest; } else { window.location.reload(); }
+                }).catch(function(err) {
+                    alert('Action failed: ' + (err && err.message ? err.message : 'network error'));
+                });
+            };
+
+            /* Reuse the shared rich confirm modal (readConfirmConfig/showConfirmDialog
+               are defined in app.js). Substitute {count} with the selection size in
+               every text field, preserving the legacy data-confirm behavior. */
+            var cfg = (typeof readConfirmConfig === 'function') ? readConfirmConfig(btn) : null;
+            if (cfg && typeof showConfirmDialog === 'function') {
+                var n = ids.length;
+                var rep = function(s) { return typeof s === 'string' ? s.replace(/\{count\}/g, n) : s; };
+                showConfirmDialog({
+                    title: rep(cfg.title),
+                    lines: (cfg.lines || []).map(rep),
+                    prompt: rep(cfg.prompt),
+                    danger: cfg.danger,
+                    okLabel: rep(cfg.okLabel),
+                    cancelLabel: rep(cfg.cancelLabel)
+                }, runAction);
+            } else {
+                runAction();
+            }
         });
     }
 

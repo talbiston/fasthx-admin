@@ -995,6 +995,37 @@ class CRUDView:
         else:
             self.export_columns_meta = self.columns_meta
 
+        # Map each displayed column to the header-filter keys that render under it.
+        # A dotted filter keyed by a FK column (e.g. "serverid.status") is resolved
+        # to its relationship display column ("server.status") when that column is
+        # shown, so multiple FK-prefixed filters don't collide on the FK column and
+        # silently drop. The original filter key is preserved as the cf_ param name.
+        self.header_filter_map = {}
+        if self.column_header_filters:
+            col_keys_set = {c["key"] for c in self.columns_meta}
+            fk_to_rel = {}
+            for rel_name, rel in self.relationships.items():
+                for local_col in rel.local_columns:
+                    fk_to_rel[local_col.key] = rel_name
+            for hf in self.column_header_filters:
+                target = None
+                if hf in col_keys_set:
+                    target = hf
+                elif "." in hf:
+                    prefix, rest = hf.split(".", 1)
+                    resolved = f"{fk_to_rel[prefix]}.{rest}" if prefix in fk_to_rel else None
+                    if resolved and resolved in col_keys_set:
+                        target = resolved
+                    elif prefix in col_keys_set:
+                        target = prefix
+                    else:
+                        for ck in col_keys_set:
+                            if hf.startswith(ck + "."):
+                                target = ck
+                                break
+                if target is not None:
+                    self.header_filter_map.setdefault(target, []).append(hf)
+
         # Build detail view metadata (all columns by default, or detail_columns if set)
         detail_keys = self.detail_columns or all_columns
         if self.detail_columns_exclude:
