@@ -797,8 +797,50 @@ This renders a standard `<a>` link instead of an HTMX button, so the browser han
 | `href` | Regular link URL. Use instead of `hx_post` for downloads or navigation. `{id}` is replaced with the row's primary key. |
 | `download` | If `true`, adds the `download` attribute to the link (optional, use with `href`) |
 | `target` | Link target (e.g., `"_blank"`) for opening in a new tab (optional, use with `href`) |
-| `class` | CSS class for the button (default: `"btn-outline-primary"`) |
-| `confirm` | If set, shows a confirmation dialog before executing |
+| `class` | CSS class appended to the dropdown item (e.g. `"text-warning"`) |
+| `confirm` | If set, shows a confirmation dialog before executing. A single-line message. |
+| `confirm_title` | Modal heading (default: `"Confirm"`). Enables the rich modal. |
+| `confirm_lines` | List of strings, each rendered as its own paragraph in the modal body. |
+| `confirm_prompt` | Emphasised closing question shown below the lines (e.g. `"Do you want to continue?"`). |
+| `confirm_danger` | If `true`, styles the modal with a red warning icon and a red confirm button. |
+| `confirm_ok_label` | Override the confirm button text (default: `"Confirm"`). |
+| `confirm_cancel_label` | Override the cancel button text (default: `"Cancel"`). |
+
+#### Rich confirmation dialogs
+
+Any of `confirm`, `confirm_title`, `confirm_lines`, or `confirm_prompt` routes the action through a **Bootstrap modal** instead of the browser's native `confirm()` popup, giving you a title, multiple body lines, an emphasised prompt, and optional danger styling:
+
+```python
+class ServerView(CRUDView):
+    model = Server
+    row_actions = [
+        {
+            "label": "Reset",
+            "icon": "arrow-counterclockwise",
+            "hx_post": "/server/{id}/reset",
+            "hx_swap": "none",
+            "class": "text-warning",
+            "confirm_danger": True,
+            "confirm_title": "Reset uCPE?",
+            "confirm_lines": [
+                "This will trigger a full rebuild of the uCPE.",
+                "Status will be reset to ordered, Playmaker will be cleared, "
+                "and the device will redeploy when registration is allowed again.",
+            ],
+            "confirm_prompt": "Do you want to continue?",
+            "confirm_ok_label": "Reset",
+        },
+    ]
+```
+
+Notes:
+
+- The plain `confirm` string still works and now renders in the same modal; a bare `confirm` with no other keys shows a simple one-line dialog.
+- The rich keys work on both HTMX button actions and `href` link actions.
+- The built-in **Delete** action also uses this modal (with danger styling).
+- If JavaScript fails to load, HTMX button actions fall back to the native `confirm()` dialog (via `hx-confirm`), so state-changing actions are never left unguarded.
+
+> **New in 0.5.69:** Added rich confirm dialogs (`confirm_title`, `confirm_lines`, `confirm_prompt`, `confirm_danger`, `confirm_ok_label`, `confirm_cancel_label`) for `row_actions` and `multi_row_actions`, honored the action `class`, and routed the Delete action through the same modal.
 
 ### Multi Row Actions
 
@@ -842,8 +884,32 @@ async def bulk_delete(self, request: Request, db: Session = Depends(get_db)):
 | `label` | Button text in the dropdown |
 | `icon` | Bootstrap Icons name (optional) |
 | `hx_post` | POST URL for the bulk action |
-| `confirm` | If set, shows a confirmation dialog before executing. Supports `{count}` placeholder, replaced with the number of selected ids at click time. |
+| `confirm` | If set, shows a confirmation dialog before executing. A single-line message. |
+| `confirm_title` | Modal heading (default: `"Confirm"`). Enables the rich modal. |
+| `confirm_lines` | List of strings, each rendered as its own paragraph in the modal body. |
+| `confirm_prompt` | Emphasised closing question shown below the lines. |
+| `confirm_danger` | If `true`, styles the modal with a red warning icon and a red confirm button. |
+| `confirm_ok_label` | Override the confirm button text (default: `"Confirm"`). |
+| `confirm_cancel_label` | Override the cancel button text (default: `"Cancel"`). |
 | `class` | CSS class for the dropdown item (e.g., `"text-danger"`) |
+
+The same [rich confirmation dialog](#rich-confirmation-dialogs) as single-row actions applies here. The `{count}` placeholder is substituted with the number of selected ids across **every** text field (`confirm`, `confirm_title`, `confirm_lines`, `confirm_prompt`), not just `confirm`:
+
+```python
+multi_row_actions = [
+    {
+        "label": "Reset Selected",
+        "icon": "arrow-counterclockwise",
+        "hx_post": "/servers/bulk-reset",
+        "class": "text-warning",
+        "confirm_danger": True,
+        "confirm_title": "Reset {count} uCPEs?",
+        "confirm_lines": ["This triggers a full rebuild of {count} devices."],
+        "confirm_prompt": "Do you want to continue?",
+        "confirm_ok_label": "Reset all",
+    },
+]
+```
 
 #### Cross-page selection (`multi_row_select_all_pages`)
 
@@ -893,6 +959,7 @@ The action response is now also checked client-side — non-`2xx` responses surf
 > **New in 0.5.13:** Added `multi_row_actions` for bulk operations on selected rows.
 > **New in 0.5.31:** Added `multi_row_select_all_pages` flag and `/{name}/select-all-ids` endpoint for cross-page selection that respects the active filter set.
 > **Changed in 0.5.48 (breaking for `multi_row_actions` consumers):** Action POSTs now send a single comma-joined `ids` field instead of one form field per id. Handlers must switch from `form.getlist("ids")` to `form.get("ids", "").split(",")`. Added 50,000-row cap and non-silent error reporting on failed actions.
+> **New in 0.5.69:** Added rich confirm dialogs (`confirm_title`, `confirm_lines`, `confirm_prompt`, `confirm_danger`, `confirm_ok_label`, `confirm_cancel_label`) with `{count}` substitution across all text fields.
 
 ### HTMX Polling Columns
 
