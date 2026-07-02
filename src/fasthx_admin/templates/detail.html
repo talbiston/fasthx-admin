@@ -5,8 +5,9 @@
 
 {% block content %}
 <div class="mb-3">
-    <a href="/{{ view.name }}" class="btn btn-outline-secondary btn-sm">
-        <i class="bi bi-arrow-left"></i> Back to list
+    <a href="/{{ view.name }}" class="btn btn-outline-secondary btn-sm"
+       onclick="if (document.referrer) { history.back(); return false; }">
+        <i class="bi bi-arrow-left"></i> Back
     </a>
     {% if view.can_edit %}
     <a href="/{{ view.name }}/{{ item.id }}/edit" class="btn btn-primary btn-sm">
