@@ -10,7 +10,7 @@ from .database import Base, init_db, get_db, get_engine
 from .auth import get_current_user, OidcAuthenticator, AuthError, AUTH_DISABLED
 from .ai_chat import ToolRegistry, tool_registry, AIProvider, OpenAICompatibleProvider, ai_complete
 
-__version__ = "0.5.64"
+__version__ = "0.5.71"
 
 __all__ = [
     "Admin",

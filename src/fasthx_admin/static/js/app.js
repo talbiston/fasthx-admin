@@ -207,7 +207,10 @@ var _toastHandled = null;
 // This is the primary listener — works even when the target element is removed from the DOM.
 document.body.addEventListener('showToast', function (event) {
     var d = (event.detail && event.detail.value) ? event.detail.value : event.detail;
-    var key = JSON.stringify(d);
+    // htmx 2.x adds a circular `elt` (the triggering element) to event.detail, so
+    // JSON.stringify(d) throws "circular structure" and the toast never renders.
+    // Build the de-dup key from just the toast fields.
+    var key = d ? (d.message || '') + '|' + (d.type || '') : '';
     if (_toastHandled === key) return;
     _toastHandled = key;
     setTimeout(function () { _toastHandled = null; }, 200);
