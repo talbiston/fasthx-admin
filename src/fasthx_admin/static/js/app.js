@@ -201,16 +201,20 @@ document.addEventListener('click', function (evt) {
 });
 
 // Dedup guard — prevent double-firing from both native event and afterSettle fallback.
+// Both paths must build the key with _toastKey; differing key formats defeat the guard.
 var _toastHandled = null;
+
+// htmx 2.x adds a circular `elt` (the triggering element) to event.detail, so the key
+// must be built from just the toast fields — JSON.stringify would throw on the cycle.
+function _toastKey(d) {
+    return d ? (d.message || '') + '|' + (d.type || '') : '';
+}
 
 // HTMX natively dispatches events from HX-Trigger headers on the body.
 // This is the primary listener — works even when the target element is removed from the DOM.
 document.body.addEventListener('showToast', function (event) {
     var d = (event.detail && event.detail.value) ? event.detail.value : event.detail;
-    // htmx 2.x adds a circular `elt` (the triggering element) to event.detail, so
-    // JSON.stringify(d) throws "circular structure" and the toast never renders.
-    // Build the de-dup key from just the toast fields.
-    var key = d ? (d.message || '') + '|' + (d.type || '') : '';
+    var key = _toastKey(d);
     if (_toastHandled === key) return;
     _toastHandled = key;
     setTimeout(function () { _toastHandled = null; }, 200);
@@ -235,7 +239,7 @@ document.addEventListener('htmx:afterSettle', function (event) {
     try {
         var data = JSON.parse(trigger);
         if (data.showToast) {
-            var key = JSON.stringify(data.showToast);
+            var key = _toastKey(data.showToast);
             if (_toastHandled === key) return;
             _toastHandled = key;
             setTimeout(function () { _toastHandled = null; }, 200);

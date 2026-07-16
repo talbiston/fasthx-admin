@@ -1882,12 +1882,19 @@ class CRUDView:
                             "openpyxl is required for XLSX export: pip install openpyxl",
                             status_code=500,
                         )
+                    from openpyxl.cell.cell import ILLEGAL_CHARACTERS_RE
+
+                    def _xlsx_safe(v):
+                        # XLSX forbids ASCII control chars in cell text; strip
+                        # them so a stray control char doesn't 500 the export.
+                        return ILLEGAL_CHARACTERS_RE.sub("", v) if isinstance(v, str) else v
+
                     wb = openpyxl.Workbook()
                     ws = wb.active
                     ws.title = view.display_name
-                    ws.append(col_labels)
+                    ws.append([_xlsx_safe(c) for c in col_labels])
                     for row in rows_data:
-                        ws.append(row)
+                        ws.append([_xlsx_safe(c) for c in row])
                     output = io.BytesIO()
                     wb.save(output)
                     output.seek(0)
