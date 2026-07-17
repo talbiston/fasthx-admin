@@ -33,6 +33,25 @@ from celery import Celery
 from .auth import get_current_user
 from .database import get_db
 
+
+def _resolve_static_version() -> str:
+    """Cache-busting token for first-party static assets.
+
+    Templates append this to their ``app.js``/``style.css`` URLs as ``?v=``, so a
+    released version change forces browsers to re-fetch instead of serving a stale
+    copy. Read from dist metadata rather than ``__version__`` (importing that here
+    would be circular, and the literal has drifted from pyproject before).
+    """
+    from importlib.metadata import PackageNotFoundError, version
+
+    try:
+        return version("fasthx-admin")
+    except PackageNotFoundError:
+        return "dev"
+
+
+_STATIC_VERSION = _resolve_static_version()
+
 _PACKAGE_DIR = Path(__file__).resolve().parent
 
 # Hard cap on multi_row_select_all_pages selection size. Bulk actions POST
@@ -2539,6 +2558,7 @@ class Admin:
             context.setdefault("nav_categories", admin.get_nav_categories(user))
             context.setdefault("active_page", "")
             context.setdefault("static_url", admin.static_url)
+            context.setdefault("static_version", _STATIC_VERSION)
             context.setdefault("admin_title", admin.title)
             if admin.ai_chat_enabled:
                 from .ai_chat import is_chat_widget_enabled

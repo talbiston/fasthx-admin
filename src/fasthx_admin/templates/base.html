@@ -14,7 +14,7 @@
     <link href="{{ static_url }}/vendor/bootstrap/bootstrap.min.css" rel="stylesheet">
     <link href="{{ static_url }}/vendor/bootstrap-icons/bootstrap-icons.min.css" rel="stylesheet">
     <link href="{{ static_url }}/vendor/tom-select/tom-select.bootstrap5.min.css" rel="stylesheet">
-    <link href="{{ static_url }}/css/style.css" rel="stylesheet">
+    <link href="{{ static_url }}/css/style.css?v={{ static_version }}" rel="stylesheet">
     <script src="{{ static_url }}/vendor/htmx/htmx.min.js"></script>
     <script src="{{ static_url }}/vendor/htmx/sse.js"></script>
 </head>
@@ -157,13 +157,13 @@
 
     <script src="{{ static_url }}/vendor/bootstrap/bootstrap.bundle.min.js"></script>
     <script src="{{ static_url }}/vendor/tom-select/tom-select.complete.min.js"></script>
-    <script src="{{ static_url }}/js/app.js"></script>
+    <script src="{{ static_url }}/js/app.js?v={{ static_version }}"></script>
     {% if ai_chat_enabled %}
-    <link href="{{ static_url }}/css/ai-chat.css" rel="stylesheet">
+    <link href="{{ static_url }}/css/ai-chat.css?v={{ static_version }}" rel="stylesheet">
     <script src="{{ static_url }}/vendor/marked/marked.min.js"></script>
     <script src="{{ static_url }}/vendor/dompurify/purify.min.js"></script>
     {% include "partials/_ai_chat_widget.html" %}
-    <script src="{{ static_url }}/js/ai-chat.js"></script>
+    <script src="{{ static_url }}/js/ai-chat.js?v={{ static_version }}"></script>
     {% endif %}
     <script>
         // Collapsible sidebar categories
