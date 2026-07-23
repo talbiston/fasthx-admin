@@ -1100,6 +1100,66 @@ By default each box does a case-insensitive **literal "contains"** match, so met
 - An empty or syntactically invalid pattern (e.g. a half-typed `re:[`) safely falls back to a literal match — it never errors.
 - Works on dotted FK filters too (`re:` after the value, e.g. `cf_serverid.hostname=re:^web-`).
 
+##### Regex reference
+
+Everything below the `re:` prefix is a regular expression. The tokens in this table work identically on both PostgreSQL and SQLite (see the portability note for the two exceptions).
+
+**Anchors**
+
+| Symbol | Matches | Example | Matches | Doesn't match |
+|---|---|---|---|---|
+| `^` | Start of string | `re:^web` | `web-01` | `my-web` |
+| `$` | End of string | `re:01$` | `web-01` | `01-web` |
+| `\b` | Word boundary (see note) | `re:\bup\b` | `link up` | `backup` |
+
+**Character types**
+
+| Symbol | Matches | Example | Matches | Doesn't match |
+|---|---|---|---|---|
+| `.` | Any single character | `re:10.0` | `10.0`, `1000` | `1.0` |
+| `\d` | A digit `0–9` | `re:port-\d` | `port-8` | `port-x` |
+| `\D` | A non-digit | `re:\D$` | `web-a` | `web-1` |
+| `\w` | Word char (letter, digit, `_`) | `re:^\w+$` | `web_01` | `web-01` |
+| `\W` | Non-word char | `re:\W` | `10.0` | `1000` |
+| `\s` | Whitespace | `re:up\sdown` | `up down` | `updown` |
+| `\S` | Non-whitespace | `re:^\S+$` | `web-01` | `web 01` |
+
+**Character classes**
+
+| Symbol | Matches | Example | Matches | Doesn't match |
+|---|---|---|---|---|
+| `[abc]` | Any one of `a`, `b`, `c` | `re:web-0[12]` | `web-01`, `web-02` | `web-03` |
+| `[^abc]` | Any char *except* `a`, `b`, `c` | `re:web-0[^12]` | `web-03` | `web-01` |
+| `[a-z]` | Any char in the range | `re:^[a-f0-9]+$` | `3fa9` | `3g` (hex only) |
+
+**Quantifiers** (apply to the preceding item)
+
+| Symbol | Matches | Example | Matches | Doesn't match |
+|---|---|---|---|---|
+| `*` | 0 or more | `re:ab*c` | `ac`, `abbc` | `adc` |
+| `+` | 1 or more | `re:ab+c` | `abc`, `abbc` | `ac` |
+| `?` | 0 or 1 (optional) | `re:colou?r` | `color`, `colour` | `colouur` |
+| `{n}` | Exactly *n* | `re:\d{4}` | `2026` | `202` |
+| `{n,}` | *n* or more | `re:\d{2,}` | `10`, `100` | `1` |
+| `{n,m}` | Between *n* and *m* | `re:a{2,3}` | `aa`, `aaa` | `a` (needs at least 2) |
+
+**Groups & alternation**
+
+| Symbol | Matches | Example | Matches | Doesn't match |
+|---|---|---|---|---|
+| `(…)` | Group (apply a quantifier to a sub-pattern) | `re:(ab)+` | `abab` | `ba` |
+| `\|` | Alternation (OR) | `re:^(up\|down)$` | `up`, `down` | `unknown` |
+
+**Escaping** — put a `\` before a metacharacter to match it literally:
+
+| Input | Matches | Notes |
+|---|---|---|
+| `re:\.` | A literal `.` | Unescaped `.` means "any char" |
+| `re:10\.0\.0\.` | `10.0.0.x` | Anchor an IP prefix without false-positives |
+| `re:\(prod\)` | A literal `(prod)` | `\(` and `\)` escape the group syntax |
+
+> **Portability note:** two tokens differ between backends. Word boundary is `\b` on SQLite (Python `re`) but `\y` on PostgreSQL (POSIX). POSIX bracket classes like `[[:digit:]]` work on PostgreSQL only — prefer `\d`, which works on both. Everything else in the tables above is identical across the two.
+
 > **Supported backends:** PostgreSQL and SQLite. On other backends a `re:` value falls back to a literal contains-match.
 
 > **New in 0.5.10:** Added `column_header_filters` for inline per-column filtering.
