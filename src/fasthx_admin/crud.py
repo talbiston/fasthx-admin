@@ -151,6 +151,82 @@ def _joined_table_names(query) -> set:
     return names
 
 
+# Inline header filters treat a leading ``re:`` as an opt-in regex marker. Plain
+# text (an IP, a hostname, a path) stays a literal "contains" match, so metachars
+# in ordinary data can never be misread as regex — only an explicit ``re:`` prefix
+# switches modes.
+_HEADER_FILTER_REGEX_PREFIX = "re:"
+
+
+def _header_filter_clause(col_expr, raw_val: str, dialect_name: str):
+    """Build the SQL clause for one inline header-filter value on *col_expr*.
+
+    Default is a case-insensitive "contains" (``ILIKE '%val%'``), unchanged from
+    the original behaviour. A value prefixed with ``re:`` is treated as a
+    case-insensitive regex, evaluated in SQL via the backend's native operator
+    (Postgres ``~*``; SQLite ``REGEXP`` via the function registered in
+    ``database.py``). An empty or syntactically invalid pattern falls back to a
+    literal "contains" match on the pattern text, so a half-typed regex from the
+    debounced keyup never errors or returns garbage.
+    """
+    val = raw_val.strip()
+    str_col = cast(col_expr, String)
+
+    if val.startswith(_HEADER_FILTER_REGEX_PREFIX):
+        pattern = val[len(_HEADER_FILTER_REGEX_PREFIX):]
+        if pattern:
+            try:
+                re.compile(pattern)
+            except re.error:
+                pass  # invalid/incomplete regex → literal fallback below
+            else:
+                if dialect_name == "postgresql":
+                    return str_col.op("~*")(pattern)
+                if dialect_name == "sqlite":
+                    return str_col.op("REGEXP")(pattern)
+                # Unknown backend without vetted regex support: literal fallback.
+                return str_col.ilike(f"%{pattern}%")
+        # Empty or invalid pattern: match literally on the pattern text.
+        return str_col.ilike(f"%{pattern}%")
+
+    return str_col.ilike(f"%{val}%")
+
+
+def _apply_header_filters(query, view, model, header_filter_values, dialect_name):
+    """Apply parsed inline header filters (``cf_{col}`` params) to *query*.
+
+    Handles both plain columns and dotted FK notation (``serverid.hostname``),
+    joining the related table when needed. Shared by the list handler and the
+    select-all-ids handler so the two never diverge.
+    """
+    if not header_filter_values:
+        return query
+    mapper = inspect(model)
+    for col_key, val in header_filter_values.items():
+        # Dotted notation: "serverid.hostname" targets a specific FK column.
+        if "." in col_key:
+            fk_col, target_col_name = col_key.split(".", 1)
+            if fk_col in view.foreign_keys:
+                fk = view.foreign_keys[fk_col]
+                target_table = fk.column.table
+                target_model = _model_registry.get(target_table.name)
+                if target_model:
+                    # Skip the join if the search path (or a subclass
+                    # _build_query) already joined this table, else Postgres
+                    # raises DuplicateAlias.
+                    if target_table.name not in _joined_table_names(query):
+                        local_col = mapper.columns[fk_col]
+                        query = query.outerjoin(target_model, local_col == fk.column)
+                    tcol = getattr(target_model, target_col_name, None)
+                    if tcol is not None:
+                        query = query.filter(_header_filter_clause(tcol, val, dialect_name))
+        else:
+            col = getattr(model, col_key, None)
+            if col is not None:
+                query = query.filter(_header_filter_clause(col, val, dialect_name))
+    return query
+
+
 class ValidationError(Exception):
     """Raised from ``CRUDView.on_model_change`` to abort a create/edit.
 
@@ -1531,26 +1607,8 @@ class CRUDView:
 
             query = _safe_build_query(view, db, q, sort, order, active_filters)
 
-            if header_filter_values:
-                mapper = inspect(model)
-                for col_key, val in header_filter_values.items():
-                    if "." in col_key:
-                        fk_col, target_col_name = col_key.split(".", 1)
-                        if fk_col in view.foreign_keys:
-                            fk = view.foreign_keys[fk_col]
-                            target_table = fk.column.table
-                            target_model = _model_registry.get(target_table.name)
-                            if target_model:
-                                if target_table.name not in _joined_table_names(query):
-                                    local_col = mapper.columns[fk_col]
-                                    query = query.outerjoin(target_model, local_col == fk.column)
-                                tcol = getattr(target_model, target_col_name, None)
-                                if tcol is not None:
-                                    query = query.filter(cast(tcol, String).ilike(f"%{val.strip()}%"))
-                    else:
-                        col = getattr(model, col_key, None)
-                        if col is not None:
-                            query = query.filter(cast(col, String).ilike(f"%{val.strip()}%"))
+            dialect_name = db.get_bind().dialect.name
+            query = _apply_header_filters(query, view, model, header_filter_values, dialect_name)
 
             pk_col = getattr(model, view.pk_field)
             # Cap bulk selection at MULTI_ROW_SELECT_LIMIT to stay within the
@@ -1734,31 +1792,10 @@ class CRUDView:
 
             query = _safe_build_query(view, db, q, sort, order, active_filters)
 
-            # Apply header filters as "contains" on each column
-            if header_filter_values:
-                mapper = inspect(model)
-                for col_key, val in header_filter_values.items():
-                    # Dotted notation: "serverid.hostname" targets a specific FK column
-                    if "." in col_key:
-                        fk_col, target_col_name = col_key.split(".", 1)
-                        if fk_col in view.foreign_keys:
-                            fk = view.foreign_keys[fk_col]
-                            target_table = fk.column.table
-                            target_model = _model_registry.get(target_table.name)
-                            if target_model:
-                                # Skip the join if the search path (or a subclass
-                                # _build_query) already joined this table, else
-                                # Postgres raises DuplicateAlias.
-                                if target_table.name not in _joined_table_names(query):
-                                    local_col = mapper.columns[fk_col]
-                                    query = query.outerjoin(target_model, local_col == fk.column)
-                                tcol = getattr(target_model, target_col_name, None)
-                                if tcol is not None:
-                                    query = query.filter(cast(tcol, String).ilike(f"%{val.strip()}%"))
-                    else:
-                        col = getattr(model, col_key, None)
-                        if col is not None:
-                            query = query.filter(cast(col, String).ilike(f"%{val.strip()}%"))
+            # Apply inline header filters (literal "contains", or regex on a
+            # `re:`-prefixed value) on each column, joining FK tables as needed.
+            dialect_name = db.get_bind().dialect.name
+            query = _apply_header_filters(query, view, model, header_filter_values, dialect_name)
             total = query.count()
             total_pages = max(1, math.ceil(total / view.page_size))
             page = max(1, min(page, total_pages))

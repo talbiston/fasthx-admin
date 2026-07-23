@@ -180,6 +180,7 @@
                                class="form-control form-control-sm cf-input{% if not loop.last %} mb-1{% endif %}"
                                name="cf_{{ hf }}"
                                placeholder="Filter..."
+                               title="Contains match. Prefix with re: for a regex, e.g. re:^web-0[12]"
                                value="{{ header_filter_values.get(hf, '') }}"
                                hx-get="/{{ view.name }}?partial=1"
                                hx-trigger="keyup changed delay:300ms"

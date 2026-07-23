@@ -1084,8 +1084,27 @@ class OfferingView(CRUDView):
 
 Header filters work alongside the search box and `column_filters` dropdown — all are combined (AND logic). Filter values are preserved across pagination, sorting, and URL reloads via `cf_` query parameters.
 
+#### Regex matching (`re:` prefix)
+
+By default each box does a case-insensitive **literal "contains"** match, so metacharacters in ordinary data are never misread — typing `10.0.0.1` matches that IP literally and won't false-positive on `10x0y0z1`. To switch a box into **regex** mode, prefix the value with `re:`:
+
+| Input | Behaviour |
+|---|---|
+| `10.0.0.1` | Literal contains — the `.` are plain characters |
+| `re:^10\.0\.0\.` | Regex — anchored, `.` escaped to mean a literal dot |
+| `re:^(up|down)$` | Regex — exact match of `up` or `down` |
+| `re:web-0[12]` | Regex — `web-01` or `web-02` |
+
+- Matching is **case-insensitive** and unanchored (use `^`/`$` to anchor), matching Postgres `~*` semantics.
+- Regex is evaluated in **SQL** (Postgres `~*`; SQLite via a `REGEXP` function registered by `init_db`), so pagination and counts stay correct.
+- An empty or syntactically invalid pattern (e.g. a half-typed `re:[`) safely falls back to a literal match — it never errors.
+- Works on dotted FK filters too (`re:` after the value, e.g. `cf_serverid.hostname=re:^web-`).
+
+> **Supported backends:** PostgreSQL and SQLite. On other backends a `re:` value falls back to a literal contains-match.
+
 > **New in 0.5.10:** Added `column_header_filters` for inline per-column filtering.
 > **New in 0.5.11:** Added dotted FK notation support for `column_header_filters`.
+> **New in 0.5.75:** Added `re:` prefix for opt-in regex matching in header filters.
 
 ---
 
