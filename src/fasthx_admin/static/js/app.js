@@ -431,10 +431,12 @@ function initDependsOn(root) {
     });
 
     Object.keys(controllers).forEach(function (key) {
-        var ctrl = document.getElementById(key);
+        // A leading "!" inverts the relationship: visible while UNchecked.
+        var negated = key.charAt(0) === '!';
+        var ctrl = document.getElementById(negated ? key.slice(1) : key);
         if (!ctrl) return;
         var toggle = function () {
-            var checked = ctrl.checked;
+            var checked = negated ? !ctrl.checked : ctrl.checked;
             controllers[key].forEach(function (el) {
                 if (checked) {
                     el.style.overflow = 'hidden';

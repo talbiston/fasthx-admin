@@ -535,7 +535,7 @@ Customize individual form fields with extra attributes or replace their type ent
 | `hx_target` | HTMX `hx-target` selector | `"hx_target": "#other_field"` |
 | `hx_trigger` | HTMX `hx-trigger` event (defaults to `"change"`) | `"hx_trigger": "change"` |
 | `hx_swap` | HTMX `hx-swap` strategy (defaults to `"innerHTML"`) | `"hx_swap": "outerHTML"` |
-| `depends_on` | Field key of a checkbox — this field is only visible when that checkbox is checked | `"depends_on": "is_ha"` |
+| `depends_on` | Field key of a checkbox — this field is only visible when that checkbox is checked. Prefix with `!` to invert (visible only while *unchecked*) | `"depends_on": "is_ha"` |
 | `autofill` | On a checkbox — map of `{field_key: value}` to fill and lock while it is checked | `"autofill": {"wan1": "0.0.0.0/0"}` |
 | `exclusive_with` | On a checkbox — field key (or list of keys) that must never be checked at the same time | `"exclusive_with": "wan1_is_pppoe"` |
 | `description` | Tooltip text shown as an info icon next to the field label (Bootstrap tooltip) | `"description": "Must be a public IP"` |
@@ -603,6 +603,27 @@ class LaunchPadView(CRUDView):
 ```
 
 When `is_ha` is unchecked, the `ha_mode` and `ha_switch_mode` fields are hidden. When the user toggles it on, the fields appear instantly (no server round-trip).
+
+Prefix the key with `!` to invert the relationship — the field is visible *until* the checkbox is checked:
+
+```python
+form_widget_overrides = {
+    # Static addressing fields, hidden once the WAN is set to PPPoE
+    "cpe_wan1":    {"depends_on": "!wan1_is_pppoe"},
+    "cpe_wan1_gw": {"depends_on": "!wan1_is_pppoe"},
+}
+```
+
+> **Hiding is visual only.** A hidden field is collapsed with CSS but still submits its
+> current value, so a stale value can be saved for a field the user can no longer see.
+> Clear it in `on_model_change()` if that matters:
+>
+> ```python
+> def on_model_change(self, item, form_data, is_new, db, request):
+>     if item.wan1_is_pppoe:
+>         item.cpe_wan1 = None
+>         item.cpe_wan1_gw = None
+> ```
 
 **Mutually exclusive checkboxes:**
 
