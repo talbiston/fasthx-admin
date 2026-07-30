@@ -435,9 +435,30 @@ function initDependsOn(root) {
         var negated = key.charAt(0) === '!';
         var ctrl = document.getElementById(negated ? key.slice(1) : key);
         if (!ctrl) return;
-        var toggle = function () {
+        // isInit: apply the state with no animation. Sections render as a
+        // collapsed accordion, so on first paint scrollHeight is 0 for every
+        // field in a closed panel — animating would pin max-height at 0px with
+        // no transition left to fire the cleanup, hiding the field for good.
+        var toggle = function (isInit) {
             var checked = negated ? !ctrl.checked : ctrl.checked;
             controllers[key].forEach(function (el) {
+                if (isInit) {
+                    if (checked) {
+                        el.style.removeProperty('max-height');
+                        el.style.removeProperty('overflow');
+                        el.style.removeProperty('opacity');
+                        el.style.removeProperty('margin');
+                        el.style.removeProperty('padding');
+                        el.style.removeProperty('transition');
+                    } else {
+                        el.style.maxHeight = '0';
+                        el.style.opacity = '0';
+                        el.style.overflow = 'hidden';
+                        el.style.margin = '0';
+                        el.style.padding = '0';
+                    }
+                    return;
+                }
                 if (checked) {
                     el.style.overflow = 'hidden';
                     el.style.maxHeight = '0';
@@ -470,8 +491,10 @@ function initDependsOn(root) {
                 }
             });
         };
-        toggle(); // set initial state
-        ctrl.addEventListener('change', toggle);
+        toggle(true); // set initial state, unanimated
+        // Wrapped: passing toggle directly would hand it the event object,
+        // which is truthy and would take the isInit path on every change.
+        ctrl.addEventListener('change', function () { toggle(false); });
     });
 }
 
