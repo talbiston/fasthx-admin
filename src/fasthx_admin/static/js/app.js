@@ -516,6 +516,76 @@ function initAutofill(root) {
     });
 }
 
+// Mutual exclusion — checking one checkbox unchecks the others in its group.
+// Config: data-exclusive-with='["other_field", ...]' on the checkbox input.
+// Links are undirected and transitive: declaring it on either side is enough,
+// and A<->B plus A<->C puts all three in one group. Only checking clears the
+// peers; unchecking leaves everything alone, so "none selected" stays reachable.
+// Programmatic unchecks dispatch a 'change' event so depends_on / autofill bound
+// to those boxes react exactly as they would to a real click.
+// Initial render is never modified — stored data is shown as-is, even if two
+// boxes in a group somehow arrive checked.
+function initExclusive(root) {
+    var container = root || document;
+    var boxes = container.querySelectorAll('input[type="checkbox"][data-exclusive-with]');
+    if (!boxes.length) return;
+
+    // Build undirected adjacency from every declaration...
+    var adj = {};
+    var link = function (a, b) {
+        (adj[a] = adj[a] || []).push(b);
+        (adj[b] = adj[b] || []).push(a);
+    };
+    boxes.forEach(function (ctrl) {
+        var peers;
+        try {
+            peers = JSON.parse(ctrl.getAttribute('data-exclusive-with'));
+        } catch (e) {
+            return;
+        }
+        if (typeof peers === 'string') peers = [peers];
+        if (!Array.isArray(peers)) return;
+        peers.forEach(function (p) { if (p && p !== ctrl.id) link(ctrl.id, p); });
+    });
+
+    // ...then flood-fill: each connected component is one exclusive group.
+    var groupOf = {};
+    Object.keys(adj).forEach(function (start) {
+        if (groupOf[start]) return;
+        var group = [];
+        var queue = [start];
+        groupOf[start] = group;
+        while (queue.length) {
+            var cur = queue.shift();
+            group.push(cur);
+            (adj[cur] || []).forEach(function (next) {
+                if (!groupOf[next]) {
+                    groupOf[next] = group;
+                    queue.push(next);
+                }
+            });
+        }
+    });
+
+    Object.keys(groupOf).forEach(function (key) {
+        var ctrl = document.getElementById(key);
+        if (!ctrl || ctrl._exclusiveInit) return; // guard against double-binding
+        ctrl._exclusiveInit = true;
+        var group = groupOf[key];
+        ctrl.addEventListener('change', function () {
+            if (!ctrl.checked) return;
+            group.forEach(function (peerKey) {
+                if (peerKey === key) return;
+                var peer = document.getElementById(peerKey);
+                if (!peer || !peer.checked) return;
+                peer.checked = false;
+                // Peer handlers see checked=false and bail, so this can't loop.
+                peer.dispatchEvent(new Event('change', { bubbles: true }));
+            });
+        });
+    });
+}
+
 // Bootstrap tooltips
 function initTooltips(root) {
     var container = root || document;
@@ -531,6 +601,7 @@ document.addEventListener('DOMContentLoaded', function () {
     initTomSelect();
     initDependsOn();
     initAutofill();
+    initExclusive();
     initTooltips();
 });
 
@@ -552,6 +623,7 @@ document.addEventListener('htmx:afterSwap', function (event) {
     initTomSelect(event.detail.target);
     initDependsOn(event.detail.target);
     initAutofill(event.detail.target);
+    initExclusive(event.detail.target);
     initTooltips(event.detail.target);
     // Auto-open modal when content is swapped into it
     var target = event.detail.target;
@@ -569,6 +641,7 @@ document.addEventListener('htmx:afterSettle', function (event) {
         initTomSelect();
         initDependsOn();
         initAutofill();
+        initExclusive();
         initTooltips();
     }
 });
@@ -579,6 +652,7 @@ document.addEventListener('htmx:oobAfterSwap', function (event) {
     initTomSelect(event.detail.target);
     initDependsOn(event.detail.target);
     initAutofill(event.detail.target);
+    initExclusive(event.detail.target);
     initTooltips(event.detail.target);
 });
 

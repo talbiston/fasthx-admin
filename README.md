@@ -536,6 +536,8 @@ Customize individual form fields with extra attributes or replace their type ent
 | `hx_trigger` | HTMX `hx-trigger` event (defaults to `"change"`) | `"hx_trigger": "change"` |
 | `hx_swap` | HTMX `hx-swap` strategy (defaults to `"innerHTML"`) | `"hx_swap": "outerHTML"` |
 | `depends_on` | Field key of a checkbox — this field is only visible when that checkbox is checked | `"depends_on": "is_ha"` |
+| `autofill` | On a checkbox — map of `{field_key: value}` to fill and lock while it is checked | `"autofill": {"wan1": "0.0.0.0/0"}` |
+| `exclusive_with` | On a checkbox — field key (or list of keys) that must never be checked at the same time | `"exclusive_with": "wan1_is_pppoe"` |
 | `description` | Tooltip text shown as an info icon next to the field label (Bootstrap tooltip) | `"description": "Must be a public IP"` |
 
 **Examples:**
@@ -601,6 +603,43 @@ class LaunchPadView(CRUDView):
 ```
 
 When `is_ha` is unchecked, the `ha_mode` and `ha_switch_mode` fields are hidden. When the user toggles it on, the fields appear instantly (no server round-trip).
+
+**Mutually exclusive checkboxes:**
+
+Use `exclusive_with` when two or more checkboxes represent modes that can't both be on. Checking one clears the others in its group:
+
+```python
+class LaunchPadView(CRUDView):
+    model = LaunchPad
+    form_widget_overrides = {
+        "wan1_is_dhcp": {
+            "type": "checkbox",
+            "exclusive_with": "wan1_is_pppoe",
+        },
+        "wan1_is_pppoe": {
+            "type": "checkbox",
+        },
+    }
+```
+
+The link is undirected — declaring it on one side is enough, so `wan1_is_pppoe` needs no `exclusive_with` of its own. It is also transitive, so a three-way group only needs one declaration listing the others:
+
+```python
+"wan1_is_dhcp": {
+    "type": "checkbox",
+    "exclusive_with": ["wan1_is_pppoe", "wan1_is_static"],
+},
+```
+
+Checking any of the three clears the other two. Unchecking never touches the group, so "none selected" stays reachable. Clearing a peer fires the same `change` event a real click would, so any `depends_on` fields or `autofill` values wired to that peer roll back correctly.
+
+This is a client-side convenience, not a constraint — enforce the invariant in `on_model_change()` if it matters to your data:
+
+```python
+def on_model_change(self, item, form_data, is_new, db, request):
+    if item.wan1_is_dhcp and item.wan1_is_pppoe:
+        raise ValidationError("WAN1 cannot be both DHCP and PPPoE")
+```
 
 **Field tooltips:**
 
