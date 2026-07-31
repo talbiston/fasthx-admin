@@ -126,6 +126,48 @@ FILTER_TYPE_OPS = {
 _model_registry: Dict[str, Any] = {}
 
 
+def _normalize_depends_on(field: dict) -> None:
+    """Normalize a form field's visibility conditions for the template.
+
+    ``depends_on`` accepts a single checkbox key or a list of them, all of
+    which must hold. ``depends_on_any`` is the same but only one need hold.
+    Either way each condition may carry a leading ``!`` to invert it (holds
+    while the checkbox is *unchecked*).
+
+    Both collapse into one ``data-depends-on`` attribute for the client JS:
+    a comma-separated condition list, prefixed with ``any:`` in the any-of
+    case. Sharing one attribute keeps fields with identical conditions in a
+    single JS group regardless of which key declared them.
+
+    Also sets ``depends_on_collapsed``. The default paint state is every
+    checkbox unchecked, so only negated conditions hold then; a field that
+    isn't visible in that state must render collapsed and be expanded by JS
+    on load, rather than animating open on every page load.
+    """
+    dep_all = field.get("depends_on")
+    dep_any = field.pop("depends_on_any", None)
+    if dep_all and dep_any:
+        raise ValueError(
+            f"Field {field.get('key')!r} sets both depends_on and depends_on_any; "
+            "use one or the other."
+        )
+    dep = dep_all or dep_any
+    if not dep:
+        field.pop("depends_on", None)
+        return
+    conditions = [dep] if isinstance(dep, str) else list(dep)
+    conditions = [c.strip() for c in conditions if c and c.strip()]
+    if not conditions:
+        field.pop("depends_on", None)
+        return
+
+    any_mode = bool(dep_any)
+    field["depends_on"] = ("any:" if any_mode else "") + ",".join(conditions)
+    negated = [c.startswith("!") for c in conditions]
+    visible = any(negated) if any_mode else all(negated)
+    field["depends_on_collapsed"] = not visible
+
+
 def _joined_table_names(query) -> set:
     """Table names already present in *query*'s FROM clause / JOINs.
 
@@ -1167,6 +1209,7 @@ class CRUDView:
                     "is_fk": col_obj.key in self.foreign_keys,
                 }
                 field.update(self.form_widget_overrides.get(col_obj.key, {}))
+                _normalize_depends_on(field)
                 self.form_fields.append(field)
             elif col_key in self.form_widget_overrides:
                 # Virtual field: not a model column, defined entirely via form_widget_overrides
@@ -1181,6 +1224,7 @@ class CRUDView:
                     "virtual": True,
                 }
                 field.update(override)
+                _normalize_depends_on(field)
                 self.form_fields.append(field)
 
         # Build searchable columns

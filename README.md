@@ -535,7 +535,8 @@ Customize individual form fields with extra attributes or replace their type ent
 | `hx_target` | HTMX `hx-target` selector | `"hx_target": "#other_field"` |
 | `hx_trigger` | HTMX `hx-trigger` event (defaults to `"change"`) | `"hx_trigger": "change"` |
 | `hx_swap` | HTMX `hx-swap` strategy (defaults to `"innerHTML"`) | `"hx_swap": "outerHTML"` |
-| `depends_on` | Field key of a checkbox — this field is only visible when that checkbox is checked. Prefix with `!` to invert (visible only while *unchecked*) | `"depends_on": "is_ha"` |
+| `depends_on` | Checkbox field key (or list of keys) — this field is visible only while **all** of them are checked. Prefix a key with `!` to invert it (holds while *unchecked*) | `"depends_on": ["!wan1_is_pppoe", "!wan1_is_dhcp"]` |
+| `depends_on_any` | Same, but visible while **any** one of them holds | `"depends_on_any": ["is_ha", "is_cluster"]` |
 | `autofill` | On a checkbox — map of `{field_key: value}` to fill and lock while it is checked | `"autofill": {"wan1": "0.0.0.0/0"}` |
 | `exclusive_with` | On a checkbox — field key (or list of keys) that must never be checked at the same time | `"exclusive_with": "wan1_is_pppoe"` |
 | `description` | Tooltip text shown as an info icon next to the field label (Bootstrap tooltip) | `"description": "Must be a public IP"` |
@@ -613,6 +614,32 @@ form_widget_overrides = {
     "cpe_wan1_gw": {"depends_on": "!wan1_is_pppoe"},
 }
 ```
+
+**Combining conditions — `depends_on` (all) vs `depends_on_any` (any):**
+
+Pass a list to require **every** condition. Note that `depends_on` states when a
+field is *visible*, not when it is hidden — so "hide this if WAN1 is PPPoE **or**
+DHCP" is written as "show it while **not** PPPoE **and not** DHCP":
+
+```python
+form_widget_overrides = {
+    # Visible only while both boxes are unchecked; checking either collapses it
+    "cpe_wan1":    {"depends_on": ["!wan1_is_pppoe", "!wan1_is_dhcp"]},
+    "cpe_wan1_gw": {"depends_on": ["!wan1_is_pppoe", "!wan1_is_dhcp"]},
+}
+```
+
+Use `depends_on_any` when **one** condition holding is enough:
+
+```python
+form_widget_overrides = {
+    # Visible as soon as either mode is switched on
+    "ha_peer_ip": {"depends_on_any": ["is_ha", "is_cluster"]},
+}
+```
+
+Each entry in either list can be negated independently with `!`. Setting both
+keys on one field raises a `ValueError` at startup — pick one.
 
 > **Hiding is visual only.** A hidden field is collapsed with CSS but still submits its
 > current value, so a stale value can be saved for a field the user can no longer see.

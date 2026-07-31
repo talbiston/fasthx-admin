@@ -423,25 +423,37 @@ function initDependsOn(root) {
     var container = root || document;
     // Find all fields that depend on another field
     var dependents = container.querySelectorAll('[data-depends-on]');
-    var controllers = {};
+    var groups = {};
     dependents.forEach(function (el) {
         var key = el.getAttribute('data-depends-on');
-        if (!controllers[key]) controllers[key] = [];
-        controllers[key].push(el);
+        if (!groups[key]) groups[key] = [];
+        groups[key].push(el);
     });
 
-    Object.keys(controllers).forEach(function (key) {
-        // A leading "!" inverts the relationship: visible while UNchecked.
-        var negated = key.charAt(0) === '!';
-        var ctrl = document.getElementById(negated ? key.slice(1) : key);
-        if (!ctrl) return;
+    Object.keys(groups).forEach(function (key) {
+        // "a,b" -> every condition must hold; "any:a,b" -> at least one must.
+        // A leading "!" inverts a condition: it holds while UNchecked.
+        var anyMode = key.slice(0, 4) === 'any:';
+        var conditions = [];
+        var missing = false;
+        (anyMode ? key.slice(4) : key).split(',').forEach(function (part) {
+            var name = part.trim();
+            var negated = name.charAt(0) === '!';
+            var ctrl = document.getElementById(negated ? name.slice(1) : name);
+            // Bail on a group with an unrendered controller rather than judge
+            // it on the conditions we can see — leave the field as rendered.
+            if (!ctrl) { missing = true; return; }
+            conditions.push({ ctrl: ctrl, negated: negated });
+        });
+        if (missing || !conditions.length) return;
+        var holds = function (c) { return c.negated ? !c.ctrl.checked : c.ctrl.checked; };
         // isInit: apply the state with no animation. Sections render as a
         // collapsed accordion, so on first paint scrollHeight is 0 for every
         // field in a closed panel — animating would pin max-height at 0px with
         // no transition left to fire the cleanup, hiding the field for good.
         var toggle = function (isInit) {
-            var checked = negated ? !ctrl.checked : ctrl.checked;
-            controllers[key].forEach(function (el) {
+            var checked = anyMode ? conditions.some(holds) : conditions.every(holds);
+            groups[key].forEach(function (el) {
                 if (isInit) {
                     if (checked) {
                         el.style.removeProperty('max-height');
@@ -494,7 +506,9 @@ function initDependsOn(root) {
         toggle(true); // set initial state, unanimated
         // Wrapped: passing toggle directly would hand it the event object,
         // which is truthy and would take the isInit path on every change.
-        ctrl.addEventListener('change', function () { toggle(false); });
+        conditions.forEach(function (c) {
+            c.ctrl.addEventListener('change', function () { toggle(false); });
+        });
     });
 }
 

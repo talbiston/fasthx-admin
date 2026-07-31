@@ -1,7 +1,7 @@
-{# Positive deps render collapsed and are expanded by JS on load; negated deps
-   ("!field") render open, since their common state is visible — otherwise every
-   such field would animate open on every page load. #}
-<div class="mb-3"{% if field.get('depends_on') %} data-depends-on="{{ field.depends_on }}"{% if not field.depends_on.startswith('!') %} style="max-height:0;opacity:0;overflow:hidden;margin:0!important;padding:0;transition:max-height .3s ease,opacity .3s ease,margin .3s ease"{% endif %}{% endif %}>
+{# Fields hidden in the all-unchecked default state render collapsed and are
+   expanded by JS on load; the rest render open, so they don't animate open on
+   every page load. _normalize_depends_on() decides which is which. #}
+<div class="mb-3"{% if field.get('depends_on') %} data-depends-on="{{ field.depends_on }}"{% if field.get('depends_on_collapsed') %} style="max-height:0;opacity:0;overflow:hidden;margin:0!important;padding:0;transition:max-height .3s ease,opacity .3s ease,margin .3s ease"{% endif %}{% endif %}>
     {% if field.type == 'checkbox' %}
     <div class="form-check form-switch">
         <input type="checkbox" name="{{ field.key }}" id="{{ field.key }}"
