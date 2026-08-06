@@ -289,6 +289,17 @@ class ValidationError(Exception):
         super().__init__(message)
 
 
+# How long each toast type stays on screen, in milliseconds. Errors and warnings
+# carry the messages people actually need time to read, so they linger.
+DEFAULT_TOAST_DELAYS: Dict[str, int] = {
+    "success": 5000,
+    "info": 5000,
+    "warning": 10000,
+    "danger": 15000,
+}
+DEFAULT_TOAST_DELAY = 5000
+
+
 def toast_response(
     message: str | None = None,
     type: str = "info",
@@ -297,6 +308,8 @@ def toast_response(
     status_code: int = 200,
     request=None,
     refresh: bool = False,
+    delay: int | None = None,
+    autohide: bool | None = None,
 ) -> HTMLResponse:
     """Return an HTMLResponse that shows a toast and optionally navigates.
 
@@ -335,13 +348,30 @@ def toast_response(
         refresh: When True, refresh the current list view's table body in place
             instead of (or before falling back from) navigating. Takes precedence
             over ``redirect``.
+        delay: How long the toast stays on screen, in milliseconds. Defaults to
+            ``DEFAULT_TOAST_DELAYS[type]`` — 5s for success/info, 10s for warning,
+            15s for danger. Passing an explicit delay to a ``danger`` toast also
+            makes it auto-hide again unless ``autohide`` says otherwise.
+        autohide: Whether the toast dismisses itself. ``danger`` toasts default to
+            ``False`` (they stay until the user closes them) so an error can't
+            scroll past unread; everything else defaults to ``True``. Set
+            explicitly to override.
     """
     import urllib.parse
     from urllib.parse import urlparse, parse_qsl, urlencode
 
+    if autohide is None:
+        # A danger toast sticks around unless the caller opted into a timed one.
+        autohide = not (type == "danger" and delay is None)
+
     toast_data: Optional[Dict[str, Any]] = None
     if message:
-        toast_data = {"message": message, "type": type}
+        toast_data = {
+            "message": message,
+            "type": type,
+            "delay": delay or DEFAULT_TOAST_DELAYS.get(type, DEFAULT_TOAST_DELAY),
+            "autohide": autohide,
+        }
         if title:
             toast_data["title"] = title
 

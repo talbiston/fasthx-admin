@@ -28,6 +28,9 @@ function showToast(detail) {
     var type = data.type || 'info';
     var title = data.title || type.charAt(0).toUpperCase() + type.slice(1);
     var delay = data.delay || 5000;
+    // Sticky by default only when the server says so — danger toasts opt out of
+    // auto-hiding so a long error can't vanish before it's read.
+    var autohide = data.autohide !== false;
 
     var icons = {
         success: 'check-circle-fill',
@@ -51,7 +54,7 @@ function showToast(detail) {
     var container = document.getElementById('toast-container');
     if (container) {
         container.appendChild(toastEl);
-        var toast = new bootstrap.Toast(toastEl, { delay: delay });
+        var toast = new bootstrap.Toast(toastEl, { delay: delay, autohide: autohide });
         toast.show();
         toastEl.addEventListener('hidden.bs.toast', function () {
             toastEl.remove();
