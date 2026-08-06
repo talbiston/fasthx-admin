@@ -295,7 +295,7 @@ DEFAULT_TOAST_DELAYS: Dict[str, int] = {
     "success": 5000,
     "info": 5000,
     "warning": 10000,
-    "danger": 15000,
+    "danger": 25000,
 }
 DEFAULT_TOAST_DELAY = 5000
 
