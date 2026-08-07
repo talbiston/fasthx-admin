@@ -244,18 +244,27 @@
                     overlay.style.display = 'flex';
                 }
             });
-            // Hide overlay when any HTMX request completes
-            document.body.addEventListener('htmx:afterRequest', function() {
-                if (loadingActive) {
-                    loadingActive = false;
-                    overlay.style.display = 'none';
-                }
+            // Hide overlay when any HTMX request completes — except when the
+            // response asks for a redirect (form saves do), since the browser is
+            // about to navigate and the wait isn't over yet.
+            document.body.addEventListener('htmx:afterRequest', function(e) {
+                if (!loadingActive) return;
+                var xhr = e.detail && e.detail.xhr;
+                if (xhr && (xhr.getResponseHeader('HX-Redirect') || xhr.getResponseHeader('HX-Refresh'))) return;
+                loadingActive = false;
+                overlay.style.display = 'none';
             });
-            document.body.addEventListener('htmx:responseError', function() {
-                if (loadingActive) {
-                    loadingActive = false;
-                    overlay.style.display = 'none';
-                }
+            function clearOverlay() {
+                loadingActive = false;
+                overlay.style.display = 'none';
+            }
+            document.body.addEventListener('htmx:responseError', clearOverlay);
+            document.body.addEventListener('htmx:sendError', clearOverlay);
+            document.body.addEventListener('htmx:timeout', clearOverlay);
+            // A page restored from the bfcache keeps whatever was on screen when we
+            // left it — including an overlay we deliberately held up for a redirect.
+            window.addEventListener('pageshow', function(e) {
+                if (e.persisted) clearOverlay();
             });
         })();
 
