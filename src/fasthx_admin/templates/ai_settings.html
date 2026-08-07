@@ -46,7 +46,8 @@
                             <div class="form-text">Base system prompt. Context items from the Context &amp; Tools page are appended automatically.</div>
                         </div>
                         <button type="submit" class="btn btn-primary">
-                            <i class="bi bi-check-lg me-1"></i> Save General Settings
+                            <span class="spinner-border spinner-border-sm htmx-indicator" role="status" aria-hidden="true"></span>
+                            <i class="bi bi-check-lg me-1 btn-idle-icon"></i> Save General Settings
                         </button>
                     </form>
                 </div>
@@ -94,7 +95,8 @@
                                         {% if not conn.is_active %}
                                         <form method="post" action="/ai/settings/connections/{{ conn.id }}/activate" class="d-inline">
                                             <button type="submit" class="btn btn-outline-success btn-sm" title="Set Active">
-                                                <i class="bi bi-lightning"></i> Activate
+                                                <span class="spinner-border spinner-border-sm htmx-indicator" role="status" aria-hidden="true"></span>
+                                                <i class="bi bi-lightning btn-idle-icon"></i> Activate
                                             </button>
                                         </form>
                                         {% endif %}
@@ -104,7 +106,8 @@
                                         <form method="post" action="/ai/settings/connections/{{ conn.id }}/delete" class="d-inline"
                                               onsubmit="return confirm('Delete connection &quot;{{ conn.name }}&quot;?');">
                                             <button type="submit" class="btn btn-outline-danger btn-sm">
-                                                <i class="bi bi-trash"></i>
+                                                <span class="spinner-border spinner-border-sm htmx-indicator me-0" role="status" aria-hidden="true"></span>
+                                                <i class="bi bi-trash btn-idle-icon"></i>
                                             </button>
                                         </form>
                                     </td>

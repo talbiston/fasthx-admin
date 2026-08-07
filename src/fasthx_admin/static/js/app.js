@@ -11,14 +11,44 @@ function toggleTheme() {
 }
 
 // Show global loading indicator for HTMX requests
+// Toggle a class rather than inline display: htmx injects its own
+// `.htmx-indicator { opacity: 0 }` stylesheet, so setting display alone leaves the
+// spinner laid out but invisible. The .is-busy rule restores both.
 document.addEventListener('htmx:beforeRequest', function (event) {
     var indicator = document.getElementById('global-indicator');
-    if (indicator) indicator.style.display = 'inline-block';
+    if (indicator) indicator.classList.add('is-busy');
 });
 
 document.addEventListener('htmx:afterRequest', function (event) {
     var indicator = document.getElementById('global-indicator');
-    if (indicator) indicator.style.display = 'none';
+    if (indicator) indicator.classList.remove('is-busy');
+});
+
+// Busy state for plain (non-boosted) form submits — htmx handles its own via
+// hx-indicator/hx-disabled-elt, so bail out when something already claimed the
+// event (boosted forms preventDefault, and a cancelled onsubmit confirm does too).
+document.addEventListener('submit', function (event) {
+    if (event.defaultPrevented) return;
+    var form = event.target;
+    if (!form || form.tagName !== 'FORM' || form.hasAttribute('data-no-busy')) return;
+
+    var btn = event.submitter || form.querySelector('button[type="submit"], input[type="submit"]');
+    if (!btn || btn.disabled) return;
+
+    btn.classList.add('is-busy');
+    // Defer the disable: disabling the submitter synchronously can drop its
+    // name/value from the payload the browser is still assembling.
+    setTimeout(function () { btn.disabled = true; }, 0);
+});
+
+// A page restored from the bfcache keeps the busy button we left behind — clear it
+// so hitting Back doesn't land on a permanently disabled form.
+window.addEventListener('pageshow', function (event) {
+    if (!event.persisted) return;
+    document.querySelectorAll('.is-busy').forEach(function (btn) {
+        btn.classList.remove('is-busy');
+        btn.disabled = false;
+    });
 });
 
 // Toast notifications — triggered via HX-Trigger: {"showToast": {"message": "...", "type": "success"}}

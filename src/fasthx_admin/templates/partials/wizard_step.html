@@ -38,8 +38,10 @@
         <button class="btn btn-primary"
                 hx-post="/wizard/step/2"
                 hx-target="#wizard-content"
-                hx-include="#wizard-form">
-            Next <i class="bi bi-arrow-right"></i>
+                hx-include="#wizard-form"
+                hx-disabled-elt="this">
+            <span class="spinner-border spinner-border-sm htmx-indicator" role="status" aria-hidden="true"></span>
+            Next <i class="bi bi-arrow-right btn-idle-icon"></i>
         </button>
     </div>
 </div>
@@ -82,14 +84,18 @@
         <button class="btn btn-outline-secondary"
                 hx-post="/wizard/step/1"
                 hx-target="#wizard-content"
-                hx-include="#wizard-form">
-            <i class="bi bi-arrow-left"></i> Back
+                hx-include="#wizard-form"
+                hx-disabled-elt="this">
+            <span class="spinner-border spinner-border-sm htmx-indicator" role="status" aria-hidden="true"></span>
+            <i class="bi bi-arrow-left btn-idle-icon"></i> Back
         </button>
         <button class="btn btn-primary"
                 hx-post="/wizard/step/3"
                 hx-target="#wizard-content"
-                hx-include="#wizard-form">
-            Next <i class="bi bi-arrow-right"></i>
+                hx-include="#wizard-form"
+                hx-disabled-elt="this">
+            <span class="spinner-border spinner-border-sm htmx-indicator" role="status" aria-hidden="true"></span>
+            Next <i class="bi bi-arrow-right btn-idle-icon"></i>
         </button>
     </div>
 </div>
@@ -125,14 +131,20 @@
         <button class="btn btn-outline-secondary"
                 hx-post="/wizard/step/2"
                 hx-target="#wizard-content"
-                hx-include="#wizard-form">
-            <i class="bi bi-arrow-left"></i> Back
+                hx-include="#wizard-form"
+                hx-disabled-elt="this">
+            <span class="spinner-border spinner-border-sm htmx-indicator" role="status" aria-hidden="true"></span>
+            <i class="bi bi-arrow-left btn-idle-icon"></i> Back
         </button>
         <button class="btn btn-success"
                 hx-post="/wizard/step/4"
                 hx-target="#wizard-content"
-                hx-include="#wizard-form">
-            <i class="bi bi-rocket"></i> Deploy
+                hx-include="#wizard-form"
+                hx-disabled-elt="this">
+            <span class="spinner-border spinner-border-sm htmx-indicator" role="status" aria-hidden="true"></span>
+            <i class="bi bi-rocket btn-idle-icon"></i>
+            <span class="btn-idle-label">Deploy</span>
+            <span class="btn-busy-label htmx-indicator">Deploying&hellip;</span>
         </button>
     </div>
 </div>

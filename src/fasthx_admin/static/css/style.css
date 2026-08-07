@@ -85,6 +85,10 @@
     --bs-btn-hover-border-color: var(--accent-dim);
     --bs-btn-active-bg: var(--accent-dim);
     --bs-btn-active-border-color: var(--accent-dim);
+    /* Bootstrap uses its own --bs-btn-disabled-bg (blue) while a button is
+       disabled — buttons disable themselves during requests, so theme it too. */
+    --bs-btn-disabled-bg: var(--accent);
+    --bs-btn-disabled-border-color: var(--accent);
     color: #fff;
 }
 
@@ -94,6 +98,8 @@
     --bs-btn-hover-bg: var(--accent);
     --bs-btn-hover-border-color: var(--accent);
     --bs-btn-active-bg: var(--accent-dim);
+    --bs-btn-disabled-color: var(--accent);
+    --bs-btn-disabled-border-color: var(--accent);
 }
 
 .btn-outline-secondary {
@@ -642,6 +648,34 @@ body {
 
 .spinner-border.text-primary {
     color: var(--accent) !important;
+}
+
+/* Buttons that swap their icon/label for a spinner while a request is in flight.
+   htmx sets .htmx-request on the indicator element (the button itself, via
+   hx-indicator); app.js sets .is-busy for plain, non-boosted form submits. */
+.btn.htmx-request .btn-idle-icon,
+.btn.htmx-request .btn-idle-label,
+.btn.is-busy .btn-idle-icon,
+.btn.is-busy .btn-idle-label {
+    display: none;
+}
+
+/* opacity too: htmx appends its own `.htmx-indicator { opacity: 0 }` stylesheet,
+   and only *its* .htmx-request rule restores it — .is-busy has to do so itself. */
+.btn.is-busy .htmx-indicator {
+    display: inline-block;
+    opacity: 1;
+}
+
+/* Top-bar spinner, toggled by app.js on every htmx request (same opacity caveat). */
+#global-indicator.is-busy {
+    display: inline-block;
+    opacity: 1;
+}
+
+.btn .spinner-border.htmx-indicator {
+    margin-right: 0.25rem;
+    vertical-align: -0.125em;
 }
 
 /* ---- Animations ---- */

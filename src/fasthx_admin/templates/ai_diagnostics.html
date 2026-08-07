@@ -14,7 +14,8 @@
         <form method="post" action="/ai/diagnostics/clear" class="d-inline"
               onsubmit="return confirm('Clear all diagnostic events?');">
             <button type="submit" class="btn btn-outline-danger btn-sm" {% if not events %}disabled{% endif %}>
-                <i class="bi bi-trash"></i> Clear
+                <span class="spinner-border spinner-border-sm htmx-indicator" role="status" aria-hidden="true"></span>
+                <i class="bi bi-trash btn-idle-icon"></i> Clear
             </button>
         </form>
     </div>
