@@ -258,6 +258,9 @@
                 loadingActive = false;
                 overlay.style.display = 'none';
             }
+            // Exposed so client-side form validation can take the overlay back
+            // down: the save button raises it on click, before any submit runs.
+            window.clearLoadingOverlay = clearOverlay;
             document.body.addEventListener('htmx:responseError', clearOverlay);
             document.body.addEventListener('htmx:sendError', clearOverlay);
             document.body.addEventListener('htmx:timeout', clearOverlay);

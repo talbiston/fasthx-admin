@@ -529,7 +529,7 @@ Customize individual form fields with extra attributes or replace their type ent
 | `type` | Change the HTML input type. Use `"select"` for dropdowns, `"textarea"` for multi-line text, `"checkbox"` for booleans, `"file"` for uploads (see [File Upload Fields](#file-upload-fields)), or any HTML input type (`"text"`, `"number"`, `"email"`, `"date"`, etc.) | `"type": "select"` |
 | `choices` | List of `(value, label)` tuples for `select` fields | `"choices": [("v1", "Version 1")]` |
 | `label` | Override the auto-generated field label | `"label": "Firmware"` |
-| `required` | Override whether the field shows as required | `"required": False` |
+| `required` | Override whether the field is required. Enforced on both sides: the form blocks the submit and marks the field, and the save re-checks it server-side and raises `ValidationError`. Defaults to the column's own nullability | `"required": True` |
 | `placeholder` | Placeholder text for text inputs | `"placeholder": "e.g. edge-001"` |
 | `hx_get` | HTMX `hx-get` URL for dependent dropdowns | `"hx_get": "/api/options"` |
 | `hx_target` | HTMX `hx-target` selector | `"hx_target": "#other_field"` |

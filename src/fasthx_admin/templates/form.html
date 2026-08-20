@@ -15,7 +15,7 @@
         {% set has_file = form_fields | selectattr('type', 'equalto', 'file') | list | length > 0 %}
         <form method="post" action="{{ action }}" hx-boost="true"{% if has_file %} enctype="multipart/form-data" hx-encoding="multipart/form-data"{% endif %}
               hx-indicator="find .form-save-btn"
-              hx-disabled-elt="find .form-save-btn" novalidate>
+              hx-disabled-elt="find .form-save-btn" novalidate data-admin-form>
             {% if form_sections %}
             <div class="accordion" id="formAccordion">
                 {% for section_name, section_fields in form_sections.items() %}

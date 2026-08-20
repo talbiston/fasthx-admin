@@ -168,6 +168,48 @@ def _normalize_depends_on(field: dict) -> None:
     field["depends_on_collapsed"] = not visible
 
 
+def _depends_on_holds(field: dict, form_data) -> bool:
+    """Whether a field's ``depends_on`` conditions hold for a submitted form.
+
+    Conditional fields are hidden client-side, never removed, so a hidden one
+    still posts its (empty) value. Re-evaluating the conditions here — from the
+    same checkboxes the browser looked at, an unchecked box simply being absent
+    from the form data — keeps a required-but-hidden field from failing
+    validation for a value the user was never shown a place to enter.
+
+    Mirrors ``initDependsOn()`` in app.js against the normalized
+    ``data-depends-on`` string ``_normalize_depends_on()`` produces.
+    """
+    dep = field.get("depends_on")
+    if not dep:
+        return True
+    any_mode = dep.startswith("any:")
+    raw = dep[4:] if any_mode else dep
+    conditions = [c.strip() for c in raw.split(",") if c.strip()]
+    if not conditions:
+        return True
+
+    def holds(condition: str) -> bool:
+        negated = condition.startswith("!")
+        key = condition[1:] if negated else condition
+        checked = str(form_data.get(key, "")) in ("true", "1", "on", "True")
+        return not checked if negated else checked
+
+    return any(map(holds, conditions)) if any_mode else all(map(holds, conditions))
+
+
+def _has_form_value(form_data, key: str) -> bool:
+    """True when *key* was submitted with something other than an empty value."""
+    if key not in form_data:
+        return False
+    value = form_data[key]
+    if value is None:
+        return False
+    if isinstance(value, str):
+        return bool(value.strip())
+    return True
+
+
 def _joined_table_names(query) -> set:
     """Table names already present in *query*'s FROM clause / JOINs.
 
@@ -2315,6 +2357,15 @@ class CRUDView:
         for field in self.form_fields:
             key = field["key"]
             if field.get("virtual"):
+                # Virtual fields have no column to write to, but a required one
+                # still has to carry a value — on_model_change consumes it.
+                if (
+                    field.get("required")
+                    and _depends_on_holds(field, form_data)
+                    and not _has_form_value(form_data, key)
+                ):
+                    label = field.get("label") or key.replace("_", " ").title()
+                    raise ValidationError(f"{label} is required")
                 continue
             if field.get("type") == "file":
                 # File uploads need special handling: save to disk and store
@@ -2335,8 +2386,16 @@ class CRUDView:
                 elif not value and col.nullable:
                     value = None
 
-                # Reject empty values for non-nullable fields (except booleans)
-                if not value and value != 0 and value is not False and not col.nullable and col.default is None:
+                # Reject empty values for required fields (except booleans).
+                # field["required"] starts out as the column's own nullability
+                # and is then whatever form_widget_overrides says, so an
+                # explicit "required": True on a nullable column is enforced
+                # here too.
+                if (
+                    not value and value != 0 and value is not False
+                    and field.get("required")
+                    and _depends_on_holds(field, form_data)
+                ):
                     label = field.get("label") or key.replace("_", " ").title()
                     raise ValidationError(f"{label} is required")
 
@@ -2348,8 +2407,14 @@ class CRUDView:
                 # Unchecked checkboxes are not submitted in HTML forms,
                 # so missing boolean fields must be explicitly set to False.
                 col = mapper.columns.get(key)
-                if col is not None and type(col.type).__name__.upper() == "BOOLEAN":
+                is_bool = col is not None and type(col.type).__name__.upper() == "BOOLEAN"
+                if is_bool:
                     setattr(item, key, False)
+                elif field.get("required") and _depends_on_holds(field, form_data):
+                    # A required field the browser never submitted (disabled or
+                    # dropped from the form) is still a missing value.
+                    label = field.get("label") or key.replace("_", " ").title()
+                    raise ValidationError(f"{label} is required")
 
     def _apply_file_field(self, item, field, form_data):
         """Save an uploaded file for a ``type: "file"`` form field.
@@ -2374,7 +2439,11 @@ class CRUDView:
 
         # No new file submitted: keep any existing value; enforce required on create.
         if not filename:
-            if field.get("required") and not getattr(item, key, None):
+            if (
+                field.get("required")
+                and _depends_on_holds(field, form_data)
+                and not getattr(item, key, None)
+            ):
                 raise ValidationError(f"{label} is required")
             return
 

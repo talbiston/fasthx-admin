@@ -964,6 +964,19 @@ code {
     box-shadow: 0 0 0 0.2rem var(--accent-glow) !important;
 }
 
+/* Invalid state, set by the client-side form validation in app.js. The base
+   rules above win on specificity + !important, so these have to match it. */
+.ts-wrapper.is-invalid .ts-control,
+.ts-wrapper.is-invalid.single .ts-control,
+.ts-wrapper.is-invalid.focus .ts-control,
+.ts-wrapper.is-invalid.single.input-active.focus .ts-control {
+    border-color: var(--bs-danger, #dc3545) !important;
+}
+
+.ts-wrapper.is-invalid.focus .ts-control {
+    box-shadow: 0 0 0 0.2rem rgba(220, 53, 69, 0.25) !important;
+}
+
 .ts-control .item {
     background-color: transparent !important;
     color: var(--text) !important;

@@ -658,6 +658,140 @@ function initExclusive(root) {
     });
 }
 
+// ---------------------------------------------------------------------------
+// Form validation
+// ---------------------------------------------------------------------------
+// The CRUD form carries `novalidate` because native validation can't reach the
+// controls it needs to: Tom Select hides the real <select>, and accordion
+// sections collapse their panels, so the browser lands on a non-focusable
+// element and refuses to submit without telling anyone. This does the same job
+// by hand — it opens the section, focuses the Tom Select proxy, and skips
+// fields currently hidden by depends_on.
+
+// A depends_on field whose condition doesn't hold is collapsed, not removed;
+// it isn't part of the form the user is filling in, so it isn't validated.
+// Read the conditions rather than the collapsed styles: mid-animation the
+// inline max-height is a pixel value in either direction. Same rule as
+// initDependsOn() above and _depends_on_holds() on the server.
+function fieldIsHidden(el) {
+    var wrap = el.closest('[data-depends-on]');
+    if (!wrap) return false;
+    var key = wrap.getAttribute('data-depends-on');
+    var anyMode = key.slice(0, 4) === 'any:';
+    var results = [];
+    (anyMode ? key.slice(4) : key).split(',').forEach(function (part) {
+        var name = part.trim();
+        if (!name) return;
+        var negated = name.charAt(0) === '!';
+        var ctrl = document.getElementById(negated ? name.slice(1) : name);
+        // An unrendered controller means we can't judge the group — treat the
+        // field as visible, matching initDependsOn()'s bail-out.
+        if (!ctrl) { results.push(true); return; }
+        results.push(negated ? !ctrl.checked : ctrl.checked);
+    });
+    if (!results.length) return false;
+    var visible = anyMode
+        ? results.some(function (r) { return r; })
+        : results.every(function (r) { return r; });
+    return !visible;
+}
+
+function fieldLabel(el) {
+    var wrap = el.closest('.mb-3') || el.parentElement;
+    var label = wrap ? wrap.querySelector('label') : null;
+    var text = label ? label.textContent.replace(/\*/g, '').trim() : '';
+    return text || el.name || 'This field';
+}
+
+// Tom Select replaces the control with a sibling wrapper, so the red border
+// has to go on the wrapper for anyone to see it.
+function validationTarget(el) {
+    return el.tomselect ? el.tomselect.wrapper : el;
+}
+
+function clearInvalid(el) {
+    validationTarget(el).classList.remove('is-invalid');
+    var wrap = el.closest('.mb-3') || el.parentElement;
+    var msg = wrap ? wrap.querySelector('[data-validation-message]') : null;
+    if (msg) msg.remove();
+}
+
+function markInvalid(el) {
+    clearInvalid(el);
+    var target = validationTarget(el);
+    target.classList.add('is-invalid');
+    var msg = document.createElement('div');
+    msg.className = 'invalid-feedback d-block';
+    msg.setAttribute('data-validation-message', '');
+    msg.textContent = fieldLabel(el) + ' is required';
+    target.parentNode.insertBefore(msg, target.nextSibling);
+}
+
+function isEmptyValue(el) {
+    if (el.type === 'checkbox' || el.type === 'radio') return !el.checked;
+    if (el.type === 'file') return !el.files || el.files.length === 0;
+    return String(el.value == null ? '' : el.value).trim() === '';
+}
+
+function revealInvalidField(el) {
+    var panel = el.closest('.accordion-collapse');
+    var show = function () {
+        var target = validationTarget(el);
+        target.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        if (el.tomselect) el.tomselect.focus();
+        else el.focus({ preventScroll: true });
+    };
+    if (panel && !panel.classList.contains('show') && typeof bootstrap !== 'undefined') {
+        // Focusing inside a panel that is still animating open scrolls to the
+        // wrong place, so wait for Bootstrap to finish.
+        panel.addEventListener('shown.bs.collapse', show, { once: true });
+        bootstrap.Collapse.getOrCreateInstance(panel).show();
+    } else {
+        show();
+    }
+}
+
+function validateAdminForm(form) {
+    var invalid = [];
+    form.querySelectorAll('[required]').forEach(function (el) {
+        if (el.disabled || fieldIsHidden(el)) {
+            clearInvalid(el);
+            return;
+        }
+        if (isEmptyValue(el)) {
+            markInvalid(el);
+            invalid.push(el);
+        } else {
+            clearInvalid(el);
+        }
+    });
+    if (!invalid.length) return true;
+    revealInvalidField(invalid[0]);
+    return false;
+}
+
+// Capture at the document so this runs before hx-boost's own submit handler on
+// the form; stopPropagation then keeps the event from ever reaching it.
+document.addEventListener('submit', function (event) {
+    var form = event.target;
+    if (!form || !form.matches || !form.matches('form[data-admin-form]')) return;
+    if (validateAdminForm(form)) return;
+    event.preventDefault();
+    event.stopPropagation();
+    // The save button raises the loading overlay on click, before this runs.
+    if (typeof window.clearLoadingOverlay === 'function') window.clearLoadingOverlay();
+}, true);
+
+// Clear the error as soon as the field is filled in
+document.addEventListener('input', function (event) {
+    var el = event.target;
+    if (el && el.hasAttribute && el.hasAttribute('required')) clearInvalid(el);
+});
+document.addEventListener('change', function (event) {
+    var el = event.target;
+    if (el && el.hasAttribute && el.hasAttribute('required') && !isEmptyValue(el)) clearInvalid(el);
+});
+
 // Bootstrap tooltips
 function initTooltips(root) {
     var container = root || document;
