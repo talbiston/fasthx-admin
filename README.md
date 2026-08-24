@@ -43,7 +43,15 @@ A modern admin interface framework for FastAPI built with HTMX, Jinja2, and Boot
 - [AI Chat (Optional)](#ai-chat-optional) — full guide in [docs/AI.md](docs/AI.md)
   - [One-shot AI calls (`ai_complete`)](#one-shot-ai-calls-ai_complete)
     - [Allowing tool calls](#allowing-tool-calls)
-- [Custom Pages (Dashboard, Wizard, etc.)](#custom-pages-dashboard-wizard-etc)
+- [Wizards (Multi-Step Forms)](#wizards-multi-step-forms)
+  - [Step Options](#step-options)
+  - [Wizard Attributes](#wizard-attributes)
+  - [Validating a Step](#validating-a-step)
+  - [Finishing](#finishing)
+  - [Wizards Without a Model](#wizards-without-a-model)
+  - [Audit Logging and Passwords](#audit-logging-and-passwords)
+  - [Custom Step Templates](#custom-step-templates)
+- [Custom Pages (Dashboard, Tools, etc.)](#custom-pages-dashboard-tools-etc)
 - [Custom Navigation Links](#custom-navigation-links)
 - [Templates](#templates)
 - [Theming](#theming)
@@ -63,6 +71,7 @@ A modern admin interface framework for FastAPI built with HTMX, Jinja2, and Boot
 - **Dark/light theme** -- toggle with localStorage persistence, no flash on load
 - **HTMX-powered** -- live search, sortable columns, auto-polling status cells, dependent dropdowns, progress bars
 - **Accordion form sections** -- group form fields into collapsible sections
+- **Multi-step wizards** -- declare the steps, get progress indicators, Back/Next, per-step validation and a review page
 - **Custom column formatters** -- render badges, links, icons, code blocks in table cells
 - **Custom row actions** -- per-row buttons with HTMX (deploy, build, reset, etc.)
 - **Multi row actions** -- bulk operations on selected rows with checkboxes and "With Selected" dropdown
@@ -1913,7 +1922,7 @@ class ServerView(CRUDView):
 
 ## Audit Logging
 
-fasthx-admin ships with a built-in audit log mechanism that fires on successful create, edit, and delete. It is opt-in per view and routes events to a single user-supplied callable, so you can persist them however you like (database, Python `logging`, an external sink).
+fasthx-admin ships with a built-in audit log mechanism that fires on successful create, edit, and delete (and on [wizard](#audit-logging-and-passwords) completion). It is opt-in per view and routes events to a single user-supplied callable, so you can persist them however you like (database, Python `logging`, an external sink).
 
 ### Enabling
 
@@ -1943,7 +1952,7 @@ The callable receives a single dict per action:
 
 ```python
 {
-    "action": "create" | "update" | "delete",
+    "action": "create" | "update" | "delete" | "finish",
     "model_name": "Customer",        # __name__ of the model class
     "view_name": "customers",        # CRUDView.name (URL slug)
     "item_id": 42,                    # primary key value (pk_field)
@@ -1960,6 +1969,7 @@ The `data` field varies by action:
 | `create` | Full snapshot of the new row (`{col: value, ...}`) |
 | `update` | `{"old": {...}, "new": {...}}` — **only** columns whose value changed |
 | `delete` | Snapshot of the row captured before deletion |
+| `finish` | Wizard only -- everything the user submitted, when `on_finish()` returned its own Response |
 
 Columns listed in `audit_log_exclude` are stripped from all snapshots.
 
@@ -2443,9 +2453,207 @@ The `tools=` list shares the same global `tool_registry` as the chat widget, so 
 
 ---
 
-## Custom Pages (Dashboard, Wizard, etc.)
+## Wizards (Multi-Step Forms)
 
-The auto-generated CRUD views handle model pages. For custom pages like dashboards, wizards, or tools, add standard FastAPI routes and use `admin.templates` for rendering.
+A `WizardView` splits one long form across several steps, with a progress indicator, Back/Next navigation, per-step validation and a review page. You declare the steps; the routes are generated.
+
+```python
+from fasthx_admin import WizardView
+
+class OnboardWizard(WizardView):
+    name = "onboard"           # lives at /onboard
+    model = Customer           # optional -- the last step saves a Customer
+    steps = [
+        {"label": "Details", "fields": ["name", "sid"]},
+        {"label": "Contact", "fields": ["email", "phone"]},
+        {"label": "Review", "review": True},
+    ]
+
+admin.add_view(OnboardWizard)
+```
+
+That's a working wizard. The fields are model columns, so they get the same widgets as a CRUD form (selects for enums and foreign keys, checkboxes for booleans, and so on), the review step lists everything the user entered, and **Finish** creates the `Customer` and redirects to `/customers`.
+
+Register it with `admin.add_view()` just like a CRUDView -- it shows up in the sidebar under its `category` (default `"Wizards"`).
+
+### Step options
+
+Each entry in `steps` is a dict. Only `label` is required.
+
+| Key | Description |
+|---|---|
+| `label` | Text under the step's circle in the progress indicator |
+| `fields` | Field keys to collect on this step -- model columns, or keys defined in `form_widget_overrides` |
+| `title` | Heading above the fields. Defaults to `label` |
+| `description` | Muted text under the heading |
+| `review` | `True` renders a read-only summary of everything collected so far instead of fields |
+| `template` | Custom template for the step body (see [Custom step templates](#custom-step-templates)) |
+| `nav` | `False` hides the Back/Next buttons -- for a final "working..." step that drives itself |
+
+### Wizard attributes
+
+| Attribute | Default | Description |
+|---|---|---|
+| `name` | required | URL slug. The wizard lives at `/{name}` |
+| `model` | `None` | Optional SQLAlchemy model. Lets steps name its columns, and enables the default save |
+| `steps` | required | List of step dicts |
+| `display_name` | from `name` | Page title and sidebar label |
+| `description` | `None` | Muted text under the page title |
+| `category` | `"Wizards"` | Sidebar group |
+| `icon` | `"magic"` | Bootstrap Icons name |
+| `column_labels` | `{}` | `Dict[field, label]` |
+| `form_widget_overrides` | `{}` | Same as CRUDView -- override a field's type, choices, placeholder, etc. |
+| `finish_label` | `"Finish"` | Text on the last step's button |
+| `finish_icon` | `"check-lg"` | Icon on that button |
+| `finish_redirect` | model's list view | Where to go after a successful finish |
+| `success_message` | `"Completed successfully"` | Toast shown after finishing |
+| `allowed_users` / `allowed_groups` | `None` | Same access control as a CRUDView |
+| `audit_log` | `False` | Emit an audit event when the wizard finishes |
+| `audit_log_exclude` | `None` | Columns to leave out of the audit payload |
+
+### Validating a step
+
+Required fields are checked automatically. For anything else, override `on_step()`. It runs when the user moves **forward** off a step (never on Back), and raising `ValidationError` keeps them on that step with an error toast and their input intact.
+
+```python
+class OnboardWizard(WizardView):
+    ...
+    def on_step(self, step, data, db, request=None):
+        if step == 1 and db.query(Customer).filter(Customer.sid == data["sid"]).first():
+            raise ValidationError(f"SID {data['sid']} is already taken")
+```
+
+`step` is 1-based. `data` is a dict of everything collected so far -- mutate it to carry extra values forward.
+
+### Finishing
+
+With a `model` set, the default finish creates the row for you. Override `after_finish()` for side effects:
+
+```python
+def after_finish(self, item, data, db, request=None):
+    send_welcome_email(item.email)
+```
+
+Override `on_finish()` when you need to do something other than create a row. Return a Response to take over completely, or `None` to fall back to the default save. It may be `async`.
+
+```python
+def on_finish(self, data, db, request=None):
+    provision_device(data["hostname"], data["wan_ip"])
+    return toast_response("Provisioning started", type="success", redirect="/devices")
+```
+
+### Wizards without a model
+
+Leave `model` unset when the wizard drives an action rather than creating a row. Every field is then virtual, so each one declares its own widget in `form_widget_overrides`. `choices` accepts a callable that receives a db session, so selects can be filled from the database:
+
+```python
+class DeployWizard(WizardView):
+    name = "deploy"
+    steps = [
+        {"label": "Device", "fields": ["edge_id"]},
+        {"label": "Network", "fields": ["wan_ip"]},
+        {"label": "Review", "review": True},
+    ]
+    form_widget_overrides = {
+        "edge_id": {
+            "label": "Edge Device",
+            "type": "select",
+            "required": True,
+            "choices": lambda db: [(e.id, e.hostname) for e in db.query(Edge).all()],
+        },
+        "wan_ip": {"label": "WAN IP", "required": True, "placeholder": "192.168.1.1"},
+    }
+
+    def on_finish(self, data, db, request=None):
+        start_deploy(int(data["edge_id"]), data["wan_ip"])
+        return toast_response("Deploy started", type="success", redirect="/edges")
+```
+
+### Dependent dropdowns
+
+Wizard fields use the same widget renderer as CRUD forms, so [dependent dropdowns](#dependent-dropdowns) work unchanged -- point one select at an endpoint that returns `<option>` tags for another:
+
+```python
+form_widget_overrides = {
+    "customer_id": {
+        "hx_get": "/api/orchestrators-for-customer",
+        "hx_target": "#orchestrator_id",
+    },
+}
+```
+
+### Audit logging and passwords
+
+Wizards emit [audit events](#audit-logging) the same way CRUDViews do. Set `audit_log = True` on the wizard, with `Admin(audit_logger=...)` configured:
+
+```python
+class OnboardWizard(WizardView):
+    name = "onboard"
+    model = Customer
+    audit_log = True
+    audit_log_exclude = ["password_hash"]
+```
+
+Which event fires depends on how the wizard ends:
+
+| Ending | `action` | `data` |
+|---|---|---|
+| Default save (`model` set, no `on_finish`) | `"create"` | Snapshot of the new row -- identical to a CRUD create |
+| `on_finish()` returned a Response | `"finish"` | Everything the user submitted |
+
+A wizard-created row therefore looks the same in the audit trail as a form-created one. Call `self.audit(...)` inside `on_finish()` when you want a richer payload than the default.
+
+**Password fields are masked.** Any field with `"type": "password"` renders as `••••••••` on the review step and in the audit payload -- the stored value is unaffected.
+
+The value itself still round-trips through the form's hidden inputs, because that is how wizard state is carried between steps. Treat the page source the same way you would any form carrying a secret; it never appears in a log or on the review page.
+
+### Custom step templates
+
+A step's `template` supplies only the **body** of that step. The heading, the carried-forward state, the Back/Next buttons and the progress indicators still come from the wizard, so custom steps keep working navigation. The template gets `data` (everything collected so far), plus `step` and `wizard`.
+
+```python
+{"label": "Deploy", "template": "deploy_progress.html", "nav": False}
+```
+
+```html
+<!-- deploy_progress.html — a terminal step that polls until it's done -->
+<div id="deploy-status"
+     hx-get="/deploy-status/{{ data.get('edge_id') }}"
+     hx-trigger="every 1s"
+     hx-swap="innerHTML">
+    <div class="spinner-border text-primary"></div>
+</div>
+```
+
+Put the file in a directory passed to `Admin(extra_templates_dirs=[...])`.
+
+To add your own routes to a wizard (the polling endpoint above, for instance), override `setup_endpoints()` and register them on `self.router`, exactly as with a CRUDView.
+
+### How state is carried
+
+There is no server-side session. Every value collected so far is re-emitted as a hidden input on the next step, so:
+
+- Going **Back** preserves what the user already typed, on every step.
+- Wizards work across multiple workers with no sticky sessions or shared cache.
+- Nothing is written to the database until the last step finishes.
+
+A hidden `_step` field tracks which step was submitted. Don't use `_step` as a field name.
+
+### Generated routes
+
+For a wizard with `name = "onboard"`:
+
+| Method | URL | Description |
+|---|---|---|
+| `GET` | `/onboard` | The wizard, starting at step 1 |
+| `POST` | `/onboard/step/{index}` | Render step `index` (validating the previous step when moving forward) |
+| `POST` | `/onboard/finish` | Validate the last step and finish |
+
+---
+
+## Custom Pages (Dashboard, Tools, etc.)
+
+The auto-generated CRUD views handle model pages and [`WizardView`](#wizards-multi-step-forms) handles multi-step forms. For anything else -- dashboards, report pages, one-off tools -- add standard FastAPI routes and use `admin.templates` for rendering.
 
 ### Dashboard example
 
@@ -2707,7 +2915,7 @@ fasthx-admin ships with these built-in templates:
 | `list.html` | CRUD list view with search, sortable columns, pagination, row actions |
 | `detail.html` | Read-only detail view showing all fields |
 | `form.html` | Create/edit form with optional accordion sections |
-| `wizard.html` | Multi-step wizard container |
+| `wizard.html` | Multi-step wizard page (`WizardView`) |
 
 ### Partials (HTMX targets and includes)
 
@@ -2721,7 +2929,8 @@ fasthx-admin ships with these built-in templates:
 | `partials/dropdown_options_multi.html` | `<option>` tags with OOB swaps for multi-target dependent dropdowns |
 | `partials/progress_bar.html` | Animated deployment progress bar with auto-polling |
 | `partials/_wizard_indicators.html` | Wizard step progress indicators |
-| `partials/wizard_step.html` | Wizard step content (all 4 steps) |
+| `partials/_wizard_step.html` | Wizard step frame -- heading, carried state, body, nav |
+| `partials/_wizard_nav.html` | Wizard Back / Next / Finish buttons |
 
 ### Using custom templates
 
@@ -2809,7 +3018,7 @@ Browse the full icon set at [icons.getbootstrap.com](https://icons.getbootstrap.
 
 ## Auto-Generated Routes
 
-For each registered CRUDView, these routes are created automatically:
+For each registered CRUDView, these routes are created automatically (see [Wizards](#generated-routes) for a WizardView's routes):
 
 | Method | URL | Description |
 |---|---|---|

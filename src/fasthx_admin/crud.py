@@ -210,6 +210,139 @@ def _has_form_value(form_data, key: str) -> bool:
     return True
 
 
+def _introspect_foreign_keys(model) -> Dict[str, Any]:
+    """Map FK column key -> ForeignKey, registering FK target models on the way.
+
+    Target models that have no CRUDView of their own would otherwise be missing
+    from ``_model_registry``, which is what FK select options are resolved from.
+    Shared by CRUDView and WizardView so both see the same relationships.
+    """
+    mapper = inspect(model)
+    foreign_keys = {}
+    for col in mapper.columns:
+        for fk in col.foreign_keys:
+            foreign_keys[col.key] = fk
+            # Register FK target models that may not have their own CRUDView
+            target_table = fk.column.table
+            if target_table.name not in _model_registry:
+                for rel in mapper.relationships:
+                    rel_mapper = rel.mapper
+                    if rel_mapper.local_table.name == target_table.name:
+                        _model_registry[target_table.name] = rel_mapper.class_
+                        break
+    return foreign_keys
+
+
+def _build_form_fields(
+    model,
+    form_columns,
+    *,
+    column_labels=None,
+    form_widget_overrides=None,
+    form_ajax_refs=None,
+    foreign_keys=None,
+) -> List[dict]:
+    """Build form field metadata dicts (ordered by ``form_columns``).
+
+    Each dict is what ``partials/_form_field.html`` renders: key, label, HTML
+    input type, required flag, choices and FK flag, with any
+    ``form_widget_overrides`` entry merged over the top. A key that is not a
+    model column but does have an override becomes a virtual field.
+
+    Shared by CRUDView (create/edit forms) and WizardView (step forms).
+    """
+    column_labels = column_labels or {}
+    form_widget_overrides = form_widget_overrides or {}
+    form_ajax_refs = form_ajax_refs or {}
+    if foreign_keys is None:
+        foreign_keys = _introspect_foreign_keys(model)
+
+    mapper = inspect(model)
+    col_map = {col_obj.key: col_obj for col_obj in mapper.columns}
+    fields = []
+    for col_key in form_columns:
+        col_obj = col_map.get(col_key)
+        if col_obj is not None:
+            col_type = type(col_obj.type).__name__
+            html_type = COLUMN_TYPE_MAP.get(col_type, "text")
+
+            # Check if this is an enum column
+            choices = None
+            if hasattr(col_obj.type, "enum_class") and col_obj.type.enum_class:
+                choices = [(e.value, e.value.title()) for e in col_obj.type.enum_class]
+                html_type = "select"
+
+            # Check if this is a foreign key
+            if col_obj.key in foreign_keys:
+                if form_ajax_refs and col_obj.key in form_ajax_refs:
+                    html_type = "ajax_select"
+                else:
+                    html_type = "select"
+
+            field = {
+                "key": col_obj.key,
+                "label": column_labels.get(col_obj.key, col_obj.key.replace("_", " ").title()),
+                "type": html_type,
+                "required": not col_obj.nullable and col_obj.default is None,
+                "choices": choices,
+                "is_fk": col_obj.key in foreign_keys,
+            }
+            field.update(form_widget_overrides.get(col_obj.key, {}))
+            _normalize_depends_on(field)
+            fields.append(field)
+        elif col_key in form_widget_overrides:
+            # Virtual field: not a model column, defined entirely via form_widget_overrides
+            override = form_widget_overrides[col_key]
+            field = {
+                "key": col_key,
+                "label": override.get("label", col_key.replace("_", " ").title()),
+                "type": override.get("type", "text"),
+                "required": override.get("required", False),
+                "choices": override.get("choices"),
+                "is_fk": False,
+                "virtual": True,
+            }
+            field.update(override)
+            _normalize_depends_on(field)
+            fields.append(field)
+    return fields
+
+
+def _coerce_column_value(col, value):
+    """Coerce a raw form string to the Python type a SQLAlchemy column expects.
+
+    Empty strings become ``None`` for numeric and nullable columns so a blank
+    input is stored as NULL rather than ``""``. Enum columns are converted to
+    their enum member. Shared by CRUDView forms and WizardView steps.
+    """
+    col_type = type(col.type).__name__.upper()
+
+    if col_type == "INTEGER":
+        value = int(value) if value else None
+    elif col_type == "FLOAT":
+        value = float(value) if value else None
+    elif col_type == "BOOLEAN":
+        value = value in ("true", "1", "on", "True")
+    elif not value and col.nullable:
+        value = None
+
+    if hasattr(col.type, "enum_class") and col.type.enum_class and value:
+        value = col.type.enum_class(value)
+    return value
+
+
+def _fk_choices(db: Session, foreign_keys: dict, field_key: str) -> list:
+    """(value, label) pairs for a foreign key select, from the FK's target model."""
+    fk = foreign_keys.get(field_key)
+    if not fk:
+        return []
+    target_model = _model_registry.get(fk.column.table.name)
+    if target_model:
+        items = db.query(target_model).all()
+        return [(getattr(item, 'id', str(item)), str(item)) for item in items]
+    return []
+
+
 def _joined_table_names(query) -> set:
     """Table names already present in *query*'s FROM clause / JOINs.
 
@@ -976,7 +1109,104 @@ def _safe_build_query(view, db, q, sort, order, active_filters):
         return query
 
 
-class CRUDView:
+class _AuditMixin:
+    """Audit-event emission shared by CRUDView and WizardView.
+
+    Both are no-ops unless the view sets ``audit_log = True`` *and* the app
+    passed ``Admin(audit_logger=...)``. A logger that raises is caught and
+    logged — auditing must never take down the request that triggered it.
+    """
+
+    #: Emit audit events for this view.
+    audit_log = False
+    #: Column names to leave out of audit payloads (secrets, blobs).
+    audit_log_exclude = None
+    #: Primary key attribute used to derive ``item_id``.
+    pk_field = "id"
+
+    def _audit_snapshot(self, item) -> dict:
+        """Capture a dict of column values from a model instance, dropping excluded fields."""
+        if item is None:
+            return {}
+        exclude = set(self.audit_log_exclude or [])
+        try:
+            mapper = inspect(type(item))
+        except Exception:
+            return {}
+        snapshot = {}
+        for col in mapper.columns:
+            key = col.key
+            if key in exclude:
+                continue
+            try:
+                snapshot[key] = getattr(item, key)
+            except Exception:
+                continue
+        return snapshot
+
+    def _audit_emit(self, *, action: str, item, request: Request, data: dict, item_id=None) -> None:
+        """Invoke Admin.audit_logger with a standard event, swallowing errors."""
+        if not self.audit_log:
+            return
+        logger = getattr(Admin, "audit_logger", None)
+        if logger is None:
+            return
+        if item_id is None:
+            try:
+                item_id = getattr(item, self.pk_field, None) if item is not None else None
+            except Exception:
+                item_id = None
+        user = None
+        try:
+            user = get_current_user(request) if request is not None else None
+        except Exception:
+            user = None
+        event = {
+            "action": action,
+            "model_name": getattr(self.model, "__name__", None),
+            "view_name": self.name,
+            "item_id": item_id,
+            "user": user,
+            "data": data,
+            "request": request,
+        }
+        try:
+            logger(event)
+        except Exception:
+            import logging
+            logging.getLogger("fasthx_admin.audit").exception(
+                "audit_logger raised; continuing",
+            )
+
+    def audit(
+        self,
+        action: str,
+        *,
+        item=None,
+        request: Request = None,
+        data: dict | None = None,
+        item_id=None,
+    ) -> None:
+        """Emit a custom audit event from inside an endpoint body.
+
+        Respects ``self.audit_log`` (no-op when False) and
+        ``Admin.audit_logger`` (no-op when unset). Exceptions raised by the
+        logger are caught + logged, never surfaced to the caller.
+
+        Pass ``item`` to auto-derive ``item_id`` from ``pk_field``; or pass
+        ``item_id`` directly. ``data`` is the payload dict you want logged —
+        callers are responsible for shaping it (e.g. ``{"old": ..., "new": ...}``).
+        """
+        self._audit_emit(
+            action=action,
+            item=item,
+            item_id=item_id,
+            request=request,
+            data=data or {},
+        )
+
+
+class CRUDView(_AuditMixin):
     """
     Given a SQLAlchemy model, generates list/detail/create/edit/delete routes.
 
@@ -1120,18 +1350,7 @@ class CRUDView:
         self.relationships = {
             rel.key: rel for rel in mapper.relationships
         }
-        self.foreign_keys = {}
-        for col in mapper.columns:
-            for fk in col.foreign_keys:
-                self.foreign_keys[col.key] = fk
-                # Register FK target models that may not have their own CRUDView
-                target_table = fk.column.table
-                if target_table.name not in _model_registry:
-                    for rel in mapper.relationships:
-                        rel_mapper = rel.mapper
-                        if rel_mapper.local_table.name == target_table.name:
-                            _model_registry[target_table.name] = rel_mapper.class_
-                            break
+        self.foreign_keys = _introspect_foreign_keys(model)
 
         # Determine which columns to show in the list
         if self.column_list:
@@ -1251,53 +1470,14 @@ class CRUDView:
                 })
 
         # Build form field metadata (ordered by form_columns)
-        self.form_fields = []
-        col_map = {col_obj.key: col_obj for col_obj in mapper.columns}
-        for col_key in self.form_columns:
-            col_obj = col_map.get(col_key)
-            if col_obj is not None:
-                col_type = type(col_obj.type).__name__
-                html_type = COLUMN_TYPE_MAP.get(col_type, "text")
-
-                # Check if this is an enum column
-                choices = None
-                if hasattr(col_obj.type, "enum_class") and col_obj.type.enum_class:
-                    choices = [(e.value, e.value.title()) for e in col_obj.type.enum_class]
-                    html_type = "select"
-
-                # Check if this is a foreign key
-                if col_obj.key in self.foreign_keys:
-                    if self.form_ajax_refs and col_obj.key in self.form_ajax_refs:
-                        html_type = "ajax_select"
-                    else:
-                        html_type = "select"
-
-                field = {
-                    "key": col_obj.key,
-                    "label": self.column_labels.get(col_obj.key, col_obj.key.replace("_", " ").title()),
-                    "type": html_type,
-                    "required": not col_obj.nullable and col_obj.default is None,
-                    "choices": choices,
-                    "is_fk": col_obj.key in self.foreign_keys,
-                }
-                field.update(self.form_widget_overrides.get(col_obj.key, {}))
-                _normalize_depends_on(field)
-                self.form_fields.append(field)
-            elif col_key in self.form_widget_overrides:
-                # Virtual field: not a model column, defined entirely via form_widget_overrides
-                override = self.form_widget_overrides[col_key]
-                field = {
-                    "key": col_key,
-                    "label": override.get("label", col_key.replace("_", " ").title()),
-                    "type": override.get("type", "text"),
-                    "required": override.get("required", False),
-                    "choices": override.get("choices"),
-                    "is_fk": False,
-                    "virtual": True,
-                }
-                field.update(override)
-                _normalize_depends_on(field)
-                self.form_fields.append(field)
+        self.form_fields = _build_form_fields(
+            model,
+            self.form_columns,
+            column_labels=self.column_labels,
+            form_widget_overrides=self.form_widget_overrides,
+            form_ajax_refs=self.form_ajax_refs,
+            foreign_keys=self.foreign_keys,
+        )
 
         # Build searchable columns
         if self.column_searchable is None:
@@ -1389,15 +1569,7 @@ class CRUDView:
 
     def _get_fk_options(self, db: Session, field_key: str) -> list:
         """Get options for a foreign key select field."""
-        fk = self.foreign_keys.get(field_key)
-        if not fk:
-            return []
-        target_table = fk.column.table
-        target_model = _model_registry.get(target_table.name)
-        if target_model:
-            items = db.query(target_model).all()
-            return [(getattr(item, 'id', str(item)), str(item)) for item in items]
-        return []
+        return _fk_choices(db, self.foreign_keys, field_key)
 
     def _build_query(self, db: Session, search: str = "", sort: str = "", order: str = "asc", filters: list | None = None):
         """Build a query with search, sorting, and column filters.
@@ -2373,18 +2545,8 @@ class CRUDView:
                 self._apply_file_field(item, field, form_data)
                 continue
             if key in form_data:
-                value = form_data[key]
                 col = mapper.columns[key]
-                col_type = type(col.type).__name__.upper()
-
-                if col_type == "INTEGER":
-                    value = int(value) if value else None
-                elif col_type == "FLOAT":
-                    value = float(value) if value else None
-                elif col_type == "BOOLEAN":
-                    value = value in ("true", "1", "on", "True")
-                elif not value and col.nullable:
-                    value = None
+                value = _coerce_column_value(col, form_data[key])
 
                 # Reject empty values for required fields (except booleans).
                 # field["required"] starts out as the column's own nullability
@@ -2398,9 +2560,6 @@ class CRUDView:
                 ):
                     label = field.get("label") or key.replace("_", " ").title()
                     raise ValidationError(f"{label} is required")
-
-                if hasattr(col.type, "enum_class") and col.type.enum_class and value:
-                    value = col.type.enum_class(value)
 
                 setattr(item, key, value)
             else:
@@ -2469,87 +2628,6 @@ class CRUDView:
             fh.write(data)
 
         setattr(item, key, stored)
-
-    def _audit_snapshot(self, item) -> dict:
-        """Capture a dict of column values from a model instance, dropping excluded fields."""
-        if item is None:
-            return {}
-        exclude = set(self.audit_log_exclude or [])
-        try:
-            mapper = inspect(type(item))
-        except Exception:
-            return {}
-        snapshot = {}
-        for col in mapper.columns:
-            key = col.key
-            if key in exclude:
-                continue
-            try:
-                snapshot[key] = getattr(item, key)
-            except Exception:
-                continue
-        return snapshot
-
-    def _audit_emit(self, *, action: str, item, request: Request, data: dict, item_id=None) -> None:
-        """Invoke Admin.audit_logger with a standard event, swallowing errors."""
-        if not self.audit_log:
-            return
-        logger = getattr(Admin, "audit_logger", None)
-        if logger is None:
-            return
-        if item_id is None:
-            try:
-                item_id = getattr(item, self.pk_field, None) if item is not None else None
-            except Exception:
-                item_id = None
-        user = None
-        try:
-            user = get_current_user(request) if request is not None else None
-        except Exception:
-            user = None
-        event = {
-            "action": action,
-            "model_name": self.model.__name__,
-            "view_name": self.name,
-            "item_id": item_id,
-            "user": user,
-            "data": data,
-            "request": request,
-        }
-        try:
-            logger(event)
-        except Exception:
-            import logging
-            logging.getLogger("fasthx_admin.audit").exception(
-                "audit_logger raised; continuing",
-            )
-
-    def audit(
-        self,
-        action: str,
-        *,
-        item=None,
-        request: Request = None,
-        data: dict | None = None,
-        item_id=None,
-    ) -> None:
-        """Emit a custom audit event from inside an endpoint body.
-
-        Respects ``self.audit_log`` (no-op when False) and
-        ``Admin.audit_logger`` (no-op when unset). Exceptions raised by the
-        logger are caught + logged, never surfaced to the caller.
-
-        Pass ``item`` to auto-derive ``item_id`` from ``pk_field``; or pass
-        ``item_id`` directly. ``data`` is the payload dict you want logged —
-        callers are responsible for shaping it (e.g. ``{"old": ..., "new": ...}``).
-        """
-        self._audit_emit(
-            action=action,
-            item=item,
-            item_id=item_id,
-            request=request,
-            data=data or {},
-        )
 
     def on_model_change(self, item, form_data, is_new: bool, db: Session, request: Request = None):
         """Called before a model is committed on create or edit.

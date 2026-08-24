@@ -36,6 +36,7 @@ src/fasthx_admin/
 ├── database.py        # SQLAlchemy engine/session globals (init_db, get_db, get_engine, Base)
 ├── auth.py            # OIDC/Keycloak auth (oidc_login, get_current_user, AuthError)
 ├── crud.py            # Core engine: CRUDView, Admin, ValidationError, toast_response
+├── wizard.py          # Multi-step forms: WizardView
 ├── ai_chat.py         # Optional AI chat: providers, tool registry, settings, chat handler
 ├── templates/         # Jinja2 templates (base, list, form, detail, wizard, AI settings)
 │   └── partials/      # Reusable template fragments (form fields, table body, row actions)
@@ -49,17 +50,22 @@ src/fasthx_admin/
 | `database.py` | Global SQLAlchemy configuration | `Base`, `init_db()`, `get_db()`, `get_engine()` |
 | `auth.py` | OIDC authentication flow | `oidc_login()`, `get_current_user()`, `AuthError`, `AUTH_DISABLED` |
 | `crud.py` | CRUD generation, routing, Admin factory | `CRUDView`, `Admin`, `ValidationError`, `toast_response()`, `COLUMN_TYPE_MAP` |
+| `wizard.py` | Multi-step form generation | `WizardView` |
+
+`CRUDView` and `WizardView` both inherit `_AuditMixin` (in `crud.py`), so audit events
+carry the same shape whichever one produced them.
 | `ai_chat.py` | Pluggable AI chat with tools | `AIProvider`, `OpenAICompatibleProvider`, `ToolRegistry`, `tool_registry` |
 
 ### Dependency Flow
 
 ```
-database.py ← auth.py ← crud.py ← ai_chat.py
+database.py ← auth.py ← crud.py ← wizard.py
+                              ↖ ai_chat.py
                               ↑
                          __init__.py (re-exports)
 ```
 
-Modules must not create circular imports. `database.py` depends on nothing internal. `auth.py` depends only on `database.py`. `crud.py` depends on both. `ai_chat.py` depends on `database.py`.
+Modules must not create circular imports. `database.py` depends on nothing internal. `auth.py` depends only on `database.py`. `crud.py` depends on both. `ai_chat.py` depends on `database.py`. `wizard.py` depends on `crud.py` — it reuses the field introspection, value coercion and toast helpers rather than reimplementing them.
 
 ---
 
@@ -178,6 +184,9 @@ These are the sanctioned ways users customize behavior. New features should inte
 | `on_model_delete(item, db)` | Pre-delete hook | Override method, raise `ValidationError` to abort |
 | `after_model_delete(item, db)` | Post-delete hook | Override method |
 | `setup_endpoints()` | Register custom routes | Override method, add routes to `self.router` |
+| `WizardView.on_step(step, data, db, request)` | Validate/mutate between wizard steps | Override method, raise `ValidationError` to stay on the step |
+| `WizardView.on_finish(data, db, request)` | Complete a wizard | Override method, return a Response or `None` for the default save |
+| `WizardView.after_finish(item, data, db, request)` | Side effects after the default save | Override method |
 | `@CRUDView.endpoint()` | Declarative custom endpoints | Decorator on view methods |
 | `column_formatters` | Custom cell rendering | `Dict[col, callable(value, item) -> str]` |
 | `form_widget_overrides` | Override field type/choices | `Dict[col, {type, choices, ...}]` |
@@ -275,6 +284,13 @@ These conditions must always hold. Violating any of these is a bug.
 - In production (`AUTH_DISABLED` not set): all non-public templates require authenticated session
 - `public_pages` defaults to `{"login.html"}`
 - `get_current_user()` returns `dict | None` — never raises
+
+### Wizards
+- `WizardView.name` and at least one entry in `steps` are required
+- A step field key must be a model column or a `form_widget_overrides` entry — unknown keys raise at startup (unlike CRUDView, which drops them silently)
+- Wizard state lives in the form's hidden inputs — never in a session — so steps stay stateless across workers
+- Nothing is written to the database until the last step finishes
+- `"type": "password"` fields are masked in the review step and in audit payloads
 
 ### AI Chat (when enabled)
 - `AIProvider.chat()` must return `{response: str, tool_calls: list | None}`

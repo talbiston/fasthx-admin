@@ -1,0 +1,48 @@
+{# Wizard step frame: heading, carried-forward state, body, nav buttons.
+   A step's custom "template" only supplies the body — everything else here
+   still applies, so custom steps keep working navigation and indicators. #}
+<div class="wizard-step" id="wizard-step-{{ step }}">
+    {% if step_meta.title %}<h5>{{ step_meta.title }}</h5>{% endif %}
+    {% if step_meta.description %}<p class="text-muted">{{ step_meta.description }}</p>{% endif %}
+
+    {# Everything collected so far that isn't editable on this step. #}
+    <input type="hidden" name="_step" value="{{ step }}">
+    {% for key, value in state_fields %}
+        {% if value is string %}
+    <input type="hidden" name="{{ key }}" value="{{ value }}">
+        {% else %}
+            {% for v in value %}
+    <input type="hidden" name="{{ key }}" value="{{ v }}">
+            {% endfor %}
+        {% endif %}
+    {% endfor %}
+
+    {% if step_meta.template %}
+    {% include step_meta.template %}
+    {% elif step_meta.review %}
+    <div class="card mb-3">
+        <div class="card-body">
+            <table class="table table-sm mb-0">
+                {% for row in review_rows %}
+                <tr><th style="width: 35%">{{ row.label }}</th><td>{{ row.value }}</td></tr>
+                {% endfor %}
+            </table>
+        </div>
+    </div>
+    {% else %}
+    {% for field in form_fields %}
+    {% include "partials/_form_field.html" %}
+    {% endfor %}
+    {% endif %}
+
+    {% if step_meta.nav %}
+    {% include "partials/_wizard_nav.html" %}
+    {% endif %}
+</div>
+
+{% if is_partial %}
+{# Out-of-band swap: keep the step indicators in the card header in sync. #}
+<div id="wizard-header" hx-swap-oob="innerHTML">
+    {% include "partials/_wizard_indicators.html" %}
+</div>
+{% endif %}

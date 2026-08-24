@@ -418,8 +418,24 @@ function initTomSelect(root) {
     if (typeof TomSelect === 'undefined') return;
     var container = root || document;
     container.querySelectorAll('select.form-select').forEach(function (el) {
-        if (el.tomselect) return; // already initialized
+        if (el.tomselect) {
+            // HTMX settles `class` back to the server's value ~20ms after a
+            // swap, which wipes the classes Tom Select just added and leaves
+            // the raw select visible beside its own control. Re-assert them
+            // instead of rebuilding the whole widget.
+            el.classList.add('tomselected', 'ts-hidden-accessible');
+            return;
+        }
         if (el.classList.contains('no-tomselect')) return; // opt-out
+        // A select can reach here still carrying Tom Select's own classes —
+        // destroy() leaves them behind, and partial HTMX swaps (wizard steps,
+        // any target that re-renders form fields in place) can re-init over
+        // them. Tom Select copies the input's classes onto the wrapper it
+        // builds, so initializing on top of them hides the *wrapper* instead
+        // of the raw select and the field renders twice. Start clean.
+        el.classList.remove('tomselected', 'ts-hidden-accessible');
+        var stale = el.nextElementSibling;
+        if (stale && stale.classList.contains('ts-wrapper')) stale.remove();
         var opts;
         if (el.hasAttribute('data-ajax-url')) {
             opts = getAjaxTomSelectOptions(el);
@@ -849,6 +865,11 @@ document.addEventListener('htmx:afterSettle', function (event) {
         initAutofill();
         initExclusive();
         initTooltips();
+    } else {
+        // Partial swaps (wizard steps, any target re-rendering form fields)
+        // settle their class attributes after htmx:afterSwap ran, so give
+        // Tom Select a chance to re-assert the classes settle wiped.
+        initTomSelect(target);
     }
 });
 

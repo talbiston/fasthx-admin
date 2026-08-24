@@ -23,7 +23,7 @@ from fastapi.responses import HTMLResponse, RedirectResponse, StreamingResponse
 from sqlalchemy.orm import Session
 from starlette.middleware.sessions import SessionMiddleware
 
-from fasthx_admin import Admin, CRUDView, Base, init_db, get_db, get_current_user, OidcAuthenticator, AuthError, tool_registry, toast_response, console_response, console_sse_message, ValidationError
+from fasthx_admin import Admin, CRUDView, WizardView, Base, init_db, get_db, get_current_user, OidcAuthenticator, AuthError, tool_registry, toast_response, console_response, console_sse_message, ValidationError
 
 from models import Customer, Orchestrator, FortiEdge, BuildStatus, EdgeStatus
 
@@ -50,7 +50,7 @@ app.add_middleware(SessionMiddleware, secret_key=SECRET_KEY)
 
 # --- Admin setup ---
 
-admin = Admin(app, title="Admin Demo", ai_chat=True)
+admin = Admin(app, title="Admin Demo", ai_chat=True, extra_templates_dirs=["templates"])
 
 # OIDC authenticator — the app owns the list of authorized groups.
 authenticator = OidcAuthenticator(
@@ -754,68 +754,105 @@ async def dashboard(request: Request, db: Session = Depends(get_db)):
 
 
 # --- Wizard ---
+#
+# A WizardView with no ``model``: it doesn't create a row, it drives a
+# deployment. Every field is virtual, so each one declares its own widget in
+# form_widget_overrides. Compare with a model-backed wizard, where the fields
+# are just column names and the final step saves for you.
 
 
-@app.get("/wizard", response_class=HTMLResponse)
-async def wizard(request: Request, db: Session = Depends(get_db)):
-    customers = db.query(Customer).all()
-    edges = db.query(FortiEdge).all()
+class DeployWizard(WizardView):
+    name = "wizard"
+    display_name = "Deploy Wizard"
+    category = "Wizards"
+    icon = "magic"
+    description = "Push a WAN configuration to an edge device."
 
-    return admin.templates.TemplateResponse("wizard.html", {
-        "request": request,
-        "current_step": 1,
-        "step": 1,
-        "customers": customers,
-        "edges": edges,
-        "data": {},
-        "active_page": "wizard",
-    })
+    steps = [
+        {
+            "label": "Select Device",
+            "title": "Step 1: Select Customer & Edge",
+            "description": "Choose the customer and edge device to deploy.",
+            "fields": ["customer_id", "orchestrator_id", "edge_id"],
+        },
+        {
+            "label": "Configure WAN",
+            "title": "Step 2: Configure WAN",
+            "description": "Configure the WAN interface settings.",
+            "fields": ["wan_ip", "wan_subnet", "wan_gateway", "wan_dns"],
+        },
+        {
+            "label": "Review",
+            "title": "Step 3: Review",
+            "description": "Review your deployment configuration before proceeding.",
+            "review": True,
+        },
+        {
+            # Terminal step: no Back/Next, the template polls until it's done.
+            "label": "Deploy",
+            "title": "Step 4: Deployment",
+            "template": "wizard_deploy_progress.html",
+            "nav": False,
+        },
+    ]
 
+    form_widget_overrides = {
+        "customer_id": {
+            "label": "Customer",
+            "type": "select",
+            "required": True,
+            # Callable choices are resolved per request with a live db session.
+            "choices": lambda db: [
+                (c.id, f"{c.name} ({c.sid})") for c in db.query(Customer).all()
+            ],
+            # Narrow the orchestrator list when the customer changes.
+            "hx_get": "/api/orchestrators-for-customer",
+            "hx_target": "#orchestrator_id",
+        },
+        "orchestrator_id": {
+            "label": "Orchestrator",
+            "type": "select",
+            "required": True,
+            "choices": lambda db: [
+                (o.id, f"{o.address} ({o.type})") for o in db.query(Orchestrator).all()
+            ],
+        },
+        "edge_id": {
+            "label": "Edge Device",
+            "type": "select",
+            "required": True,
+            "choices": lambda db: [
+                (e.id, f"{e.hostname} ({e.serial_number})") for e in db.query(FortiEdge).all()
+            ],
+        },
+        "wan_ip": {"label": "WAN IP Address", "required": True, "placeholder": "192.168.1.1"},
+        "wan_subnet": {"label": "Subnet Mask", "required": True, "placeholder": "255.255.255.0"},
+        "wan_gateway": {"label": "Gateway", "placeholder": "192.168.1.254"},
+        "wan_dns": {"label": "DNS Server", "placeholder": "8.8.8.8"},
+    }
 
-@app.post("/wizard/step/{step}", response_class=HTMLResponse)
-async def wizard_step(request: Request, step: int, db: Session = Depends(get_db)):
-    form_data = await request.form()
-    data = dict(form_data)
+    def on_step(self, step, data, db, request=None):
+        """Validate the WAN step, and kick off the deploy when entering step 4."""
+        if step == 2:
+            ip = data.get("wan_ip", "")
+            if ip.count(".") != 3:
+                raise ValidationError(f"'{ip}' is not a valid IPv4 address")
 
-    # Resolve names for the review step
-    if step == 3:
-        if data.get("customer_id"):
-            cust = db.query(Customer).filter(Customer.id == int(data["customer_id"])).first()
-            if cust:
-                data["customer_name"] = cust.name
-        if data.get("orchestrator_id"):
-            orch = db.query(Orchestrator).filter(Orchestrator.id == int(data["orchestrator_id"])).first()
-            if orch:
-                data["orchestrator_name"] = f"{orch.address} ({orch.type})"
-        if data.get("edge_id"):
-            edge = db.query(FortiEdge).filter(FortiEdge.id == int(data["edge_id"])).first()
+        if step == 3:
+            edge_id = int(data["edge_id"])
+            edge = db.query(FortiEdge).filter(FortiEdge.id == edge_id).first()
             if edge:
-                data["edge_name"] = f"{edge.hostname} ({edge.serial_number})"
+                edge.status = EdgeStatus.DEPLOYING
+                edge.deploy_progress = 0
+                db.commit()
+            admin.get_view("edges").deploy_progress[edge_id] = {
+                "progress": 0,
+                "status": "deploying",
+                "started": time.time(),
+            }
 
-    # Start deployment on step 4
-    if step == 4 and data.get("edge_id"):
-        edge_id = int(data["edge_id"])
-        edge = db.query(FortiEdge).filter(FortiEdge.id == edge_id).first()
-        if edge:
-            edge.status = EdgeStatus.DEPLOYING
-            edge.deploy_progress = 0
-            db.commit()
-        admin.get_view("edges").deploy_progress[edge_id] = {
-            "progress": 0,
-            "status": "deploying",
-            "started": time.time(),
-        }
 
-    customers = db.query(Customer).all()
-    edges = db.query(FortiEdge).all()
-
-    return admin.templates.TemplateResponse("partials/wizard_step.html", {
-        "request": request,
-        "step": step,
-        "data": data,
-        "customers": customers,
-        "edges": edges,
-    })
+admin.add_view(DeployWizard)
 
 
 @app.get("/wizard/deploy-status/{edge_id}", response_class=HTMLResponse)

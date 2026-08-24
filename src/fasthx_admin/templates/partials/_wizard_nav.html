@@ -1,0 +1,37 @@
+{# Back / Next (or Finish). Both post the whole form, so values survive going back. #}
+<div class="d-flex justify-content-between mt-4">
+    {% if step > 1 %}
+    <button type="button" class="btn btn-outline-secondary"
+            hx-post="/{{ wizard.name }}/step/{{ step - 1 }}"
+            hx-target="#wizard-content"
+            hx-include="#wizard-form"
+            hx-disabled-elt="this">
+        <span class="spinner-border spinner-border-sm htmx-indicator" role="status" aria-hidden="true"></span>
+        <i class="bi bi-arrow-left btn-idle-icon"></i> Back
+    </button>
+    {% else %}
+    <span></span>
+    {% endif %}
+
+    {% if is_last %}
+    <button type="button" class="btn btn-success"
+            hx-post="/{{ wizard.name }}/finish"
+            hx-target="#wizard-content"
+            hx-include="#wizard-form"
+            hx-disabled-elt="this">
+        <span class="spinner-border spinner-border-sm htmx-indicator" role="status" aria-hidden="true"></span>
+        <i class="bi bi-{{ wizard.finish_icon }} btn-idle-icon"></i>
+        <span class="btn-idle-label">{{ wizard.finish_label }}</span>
+        <span class="btn-busy-label htmx-indicator">{{ wizard.finish_busy_label }}</span>
+    </button>
+    {% else %}
+    <button type="button" class="btn btn-primary"
+            hx-post="/{{ wizard.name }}/step/{{ step + 1 }}"
+            hx-target="#wizard-content"
+            hx-include="#wizard-form"
+            hx-disabled-elt="this">
+        <span class="spinner-border spinner-border-sm htmx-indicator" role="status" aria-hidden="true"></span>
+        Next <i class="bi bi-arrow-right btn-idle-icon"></i>
+    </button>
+    {% endif %}
+</div>

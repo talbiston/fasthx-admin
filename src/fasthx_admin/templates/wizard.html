@@ -1,17 +1,21 @@
 {% extends "base.html" %}
 
-{% block title %}Deploy Wizard{% endblock %}
-{% block page_title %}Deploy Wizard{% endblock %}
+{% block title %}{{ wizard.display_name }}{% endblock %}
+{% block page_title %}{{ wizard.display_name }}{% endblock %}
 
 {% block content %}
+{% if wizard.description %}
+<p class="text-muted">{{ wizard.description }}</p>
+{% endif %}
+
 <div class="card">
     <div class="card-header" id="wizard-header">
         {% include "partials/_wizard_indicators.html" %}
     </div>
     <div class="card-body">
-        <form id="wizard-form">
+        <form id="wizard-form" novalidate>
             <div id="wizard-content">
-                {% include "partials/wizard_step.html" %}
+                {% include "partials/_wizard_step.html" %}
             </div>
         </form>
     </div>

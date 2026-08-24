@@ -1,0 +1,13 @@
+{# Body of the wizard's terminal step. The wizard frame supplies the heading,
+   hidden state and indicators; this only renders what's inside. #}
+<div class="text-center py-4" id="deploy-status"
+     hx-get="/wizard/deploy-status/{{ data.get('edge_id', '0') }}"
+     hx-trigger="every 1s"
+     hx-swap="innerHTML">
+    <div class="spinner-border text-primary mb-3" role="status"></div>
+    <p class="text-muted">Starting deployment...</p>
+    <div class="progress mx-auto" style="max-width: 400px; height: 20px;">
+        <div class="progress-bar progress-bar-striped progress-bar-animated"
+             style="width: 0%">0%</div>
+    </div>
+</div>
