@@ -2639,6 +2639,8 @@ There is no server-side session. Every value collected so far is re-emitted as a
 
 A hidden `_step` field tracks which step was submitted. Don't use `_step` as a field name.
 
+If a step or the finish raises anything -- `ValidationError`, a database error, or a bug in your own hook -- the user lands back on the step they submitted with the message in a toast and their input intact. A wizard never 500s away someone's half-filled form.
+
 ### Generated routes
 
 For a wizard with `name = "onboard"`:

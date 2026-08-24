@@ -399,3 +399,67 @@ def test_audit_log_defaults_to_off(audit_client):
         headers={"HX-Request": "true"},
     )
     assert AUDIT_EVENTS == []
+
+
+# ---------------------------------------------------------------------------
+# Unexpected errors must not cost the user the wizard
+# ---------------------------------------------------------------------------
+
+
+class ExplodingWizard(WizardView):
+    """Hooks that raise something other than ValidationError."""
+
+    name = "boom"
+    model = Member
+    steps = [
+        {"label": "One", "fields": ["username", "email"]},
+        {"label": "Two", "fields": ["nickname"]},
+    ]
+
+    def on_step(self, step, data, db, request=None):
+        if data.get("username") == "trip-step":
+            raise RuntimeError("step blew up")
+
+    def on_finish(self, data, db, request=None):
+        raise RuntimeError("finish blew up")
+
+
+@pytest.fixture()
+def boom_client():
+    engine = init_db(
+        "sqlite://",
+        connect_args={"check_same_thread": False},
+        poolclass=StaticPool,
+    )
+    Base.metadata.create_all(engine)
+    app = FastAPI()
+    admin = Admin(app)
+    admin.add_view(MemberView)
+    admin.add_view(ExplodingWizard)
+    yield TestClient(app)
+    Base.metadata.drop_all(engine)
+
+
+def test_unexpected_error_in_on_step_re_renders_instead_of_500(boom_client):
+    resp = boom_client.post(
+        "/boom/step/2",
+        data={"_step": "1", "username": "trip-step", "email": "a@b.com"},
+        headers={"HX-Request": "true"},
+    )
+    assert resp.status_code == 200
+    assert _toast(resp) == "step blew up"
+    # Back on the step they submitted, with what they typed still there.
+    assert 'id="wizard-step-1"' in resp.text
+    assert 'value="trip-step"' in resp.text
+
+
+def test_unexpected_error_in_on_finish_re_renders_instead_of_500(boom_client):
+    resp = boom_client.post(
+        "/boom/finish",
+        data={"_step": "2", "username": "ada", "email": "a@b.com", "nickname": "Countess"},
+        headers={"HX-Request": "true"},
+    )
+    assert resp.status_code == 200
+    assert _toast(resp) == "finish blew up"
+    assert 'id="wizard-step-2"' in resp.text
+    assert 'value="Countess"' in resp.text

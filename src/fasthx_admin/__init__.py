@@ -18,7 +18,7 @@ from importlib.metadata import PackageNotFoundError, version as _dist_version
 try:
     __version__ = _dist_version("fasthx-admin")
 except PackageNotFoundError:
-    __version__ = "0.6.0"
+    __version__ = "0.6.1"
 
 __all__ = [
     "Admin",

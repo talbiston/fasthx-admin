@@ -30,6 +30,7 @@ step.
 from __future__ import annotations
 
 import json
+import logging
 from inspect import isawaitable
 from typing import Any, Dict, List
 
@@ -523,6 +524,19 @@ class WizardView(_AuditMixin):
                     return wizard._render(
                         request, db, current, data, error=exc.message
                     )
+                except Exception as exc:
+                    # A hook that blew up must not cost the user the wizard.
+                    db.rollback()
+                    logging.getLogger("fasthx_admin.wizard").exception(
+                        "%s.on_step(%s) raised", type(wizard).__name__, current,
+                    )
+                    return wizard._render(
+                        request,
+                        db,
+                        current,
+                        data,
+                        error=str(exc) or "An unexpected error occurred.",
+                    )
             return wizard._render(request, db, index, data)
 
         @self.router.post(f"/{self.name}/finish", response_class=HTMLResponse)
@@ -557,7 +571,22 @@ class WizardView(_AuditMixin):
                     db,
                     meta["index"],
                     data,
-                    error="Database constraint failed — a value may already be in use.",
+                    error="A required field is missing or a value already exists.",
+                )
+            except Exception as exc:
+                # Same contract as a CRUD form's save: the user lands back on
+                # the step they submitted, with the error in a toast and their
+                # input intact — never a 500 that loses the whole wizard.
+                db.rollback()
+                logging.getLogger("fasthx_admin.wizard").exception(
+                    "%s failed to finish", type(wizard).__name__,
+                )
+                return wizard._render(
+                    request,
+                    db,
+                    meta["index"],
+                    data,
+                    error=str(exc) or "An unexpected error occurred.",
                 )
 
     def register(self, app):
