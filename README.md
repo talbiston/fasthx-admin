@@ -2527,7 +2527,15 @@ class OnboardWizard(WizardView):
 
 ### Finishing
 
-With a `model` set, the default finish creates the row for you. Override `after_finish()` for side effects:
+With a `model` set, the default finish creates the row for you. `before_save()` is your last chance to touch the item -- the wizard's counterpart to `CRUDView.on_model_change`. It runs after the collected data is applied and before `db.add()`, so raising `ValidationError` commits nothing and returns the user to the last step:
+
+```python
+def before_save(self, item, data, db, request=None):
+    if item.gw_vdom_name is None:
+        item.gw_vdom_name = (item.customer.adom or item.customer.sid).upper()
+```
+
+Override `after_finish()` for side effects:
 
 ```python
 def after_finish(self, item, data, db, request=None):

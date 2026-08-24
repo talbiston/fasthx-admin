@@ -463,3 +463,65 @@ def test_unexpected_error_in_on_finish_re_renders_instead_of_500(boom_client):
     assert _toast(resp) == "finish blew up"
     assert 'id="wizard-step-2"' in resp.text
     assert 'value="Countess"' in resp.text
+
+
+# ---------------------------------------------------------------------------
+# before_save — the wizard's on_model_change
+# ---------------------------------------------------------------------------
+
+
+class DerivingWizard(WizardView):
+    """Fills in a field the user never sees, and can veto the save."""
+
+    name = "derive"
+    model = Member
+    steps = [{"label": "Account", "fields": ["username", "email"]}]
+
+    def before_save(self, item, data, db, request=None):
+        if item.username == "banned":
+            raise ValidationError("That username is not allowed")
+        item.nickname = item.username.title()
+
+
+@pytest.fixture()
+def derive_client():
+    engine = init_db(
+        "sqlite://",
+        connect_args={"check_same_thread": False},
+        poolclass=StaticPool,
+    )
+    Base.metadata.create_all(engine)
+    app = FastAPI()
+    admin = Admin(app)
+    admin.add_view(MemberView)
+    admin.add_view(DerivingWizard)
+    yield TestClient(app)
+    Base.metadata.drop_all(engine)
+
+
+def test_before_save_can_mutate_the_item(derive_client):
+    derive_client.post(
+        "/derive/finish",
+        data={"_step": "1", "username": "ada", "email": "ada@example.com"},
+        headers={"HX-Request": "true"},
+    )
+    db = next(get_db())
+    try:
+        # Set by before_save, never submitted by the user.
+        assert db.query(Member).one().nickname == "Ada"
+    finally:
+        db.close()
+
+
+def test_before_save_can_veto_the_save(derive_client):
+    resp = derive_client.post(
+        "/derive/finish",
+        data={"_step": "1", "username": "banned", "email": "b@example.com"},
+        headers={"HX-Request": "true"},
+    )
+    assert _toast(resp) == "That username is not allowed"
+    db = next(get_db())
+    try:
+        assert db.query(Member).count() == 0  # nothing committed
+    finally:
+        db.close()

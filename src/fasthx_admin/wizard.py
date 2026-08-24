@@ -418,6 +418,7 @@ class WizardView(_AuditMixin):
             )
         item = self.model()
         self.apply_data(item, data)
+        self.before_save(item, data, db, request)
         db.add(item)
         db.commit()
         db.refresh(item)
@@ -465,6 +466,17 @@ class WizardView(_AuditMixin):
         redirect to its list view. May be ``async``.
         """
         return None
+
+    def before_save(self, item, data: dict, db: Session, request: Request = None):
+        """Called with the populated ``item`` just before the default save.
+
+        The wizard's counterpart to ``CRUDView.on_model_change``: derive fields
+        the user didn't enter, normalise what they did, or raise
+        ``ValidationError`` to send them back to the last step. Runs after
+        ``apply_data()`` and before ``db.add()``, so nothing is committed if it
+        raises. Not called when ``on_finish()`` takes over.
+        """
+        pass
 
     def after_finish(self, item, data: dict, db: Session, request: Request = None):
         """Called after the default finish committed ``item``. Side effects only."""

@@ -186,6 +186,7 @@ These are the sanctioned ways users customize behavior. New features should inte
 | `setup_endpoints()` | Register custom routes | Override method, add routes to `self.router` |
 | `WizardView.on_step(step, data, db, request)` | Validate/mutate between wizard steps | Override method, raise `ValidationError` to stay on the step |
 | `WizardView.on_finish(data, db, request)` | Complete a wizard | Override method, return a Response or `None` for the default save |
+| `WizardView.before_save(item, data, db, request)` | Validate/mutate the item before the default save | Override method, raise `ValidationError` to abort |
 | `WizardView.after_finish(item, data, db, request)` | Side effects after the default save | Override method |
 | `@CRUDView.endpoint()` | Declarative custom endpoints | Decorator on view methods |
 | `column_formatters` | Custom cell rendering | `Dict[col, callable(value, item) -> str]` |
