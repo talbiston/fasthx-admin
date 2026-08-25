@@ -13,7 +13,26 @@
     <span></span>
     {% endif %}
 
-    {% if is_last %}
+    {% if is_last and wizard.finish_actions_meta %}
+    {# Several ways to finish. The action rides in the URL, not the form, so it
+       never becomes carried-forward state on a validation re-render. Every
+       button in the step is disabled while one is in flight — with two ways to
+       save, "this" would leave the other one clickable. #}
+    <div class="d-flex gap-2">
+        {% for action in wizard.finish_actions_meta %}
+        <button type="button" class="btn {{ action.class }}"
+                hx-post="/{{ wizard.name }}/finish?action={{ action.key }}"
+                hx-target="#wizard-content"
+                hx-include="#wizard-form"
+                hx-disabled-elt="#wizard-content button">
+            <span class="spinner-border spinner-border-sm htmx-indicator" role="status" aria-hidden="true"></span>
+            {% if action.icon %}<i class="bi bi-{{ action.icon }} btn-idle-icon"></i>{% endif %}
+            <span class="btn-idle-label">{{ action.label }}</span>
+            <span class="btn-busy-label htmx-indicator">{{ action.busy_label }}</span>
+        </button>
+        {% endfor %}
+    </div>
+    {% elif is_last %}
     <button type="button" class="btn btn-success"
             hx-post="/{{ wizard.name }}/finish"
             hx-target="#wizard-content"

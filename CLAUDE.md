@@ -188,6 +188,7 @@ These are the sanctioned ways users customize behavior. New features should inte
 | `WizardView.on_finish(data, db, request)` | Complete a wizard | Override method, return a Response or `None` for the default save |
 | `WizardView.before_save(item, data, db, request)` | Validate/mutate the item before the default save | Override method, raise `ValidationError` to abort |
 | `WizardView.after_finish(item, data, db, request)` | Side effects after the default save | Override method |
+| `WizardView.finish_actions` | Several finish buttons on the last step | `List[{key, label, icon, class, busy_label, message, redirect}]`; branch on `self.finish_action(request)` |
 | `@CRUDView.endpoint()` | Declarative custom endpoints | Decorator on view methods |
 | `column_formatters` | Custom cell rendering | `Dict[col, callable(value, item) -> str]` |
 | `form_widget_overrides` | Override field type/choices | `Dict[col, {type, choices, ...}]` |
@@ -292,6 +293,7 @@ These conditions must always hold. Violating any of these is a bug.
 - Wizard state lives in the form's hidden inputs — never in a session — so steps stay stateless across workers
 - Nothing is written to the database until the last step finishes
 - `"type": "password"` fields are masked in the review step and in audit payloads
+- The `finish_actions` key travels in the query string, never the form — form keys become carried-forward hidden state and would stack up across validation retries
 
 ### AI Chat (when enabled)
 - `AIProvider.chat()` must return `{response: str, tool_calls: list | None}`

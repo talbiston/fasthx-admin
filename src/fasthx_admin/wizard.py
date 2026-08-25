@@ -31,6 +31,7 @@ from __future__ import annotations
 
 import json
 import logging
+import re
 from inspect import isawaitable
 from typing import Any, Dict, List
 
@@ -58,6 +59,13 @@ from .database import get_db
 
 #: Form key the wizard uses to track which step was submitted. Never user data.
 STEP_KEY = "_step"
+
+#: Query-string key naming which finish button was clicked. It rides in the URL
+#: rather than the form so it never lands in the wizard's carried-forward state.
+ACTION_KEY = "action"
+
+#: Finish action keys go straight into a URL and a template, so keep them boring.
+_ACTION_KEY_RE = re.compile(r"^[A-Za-z0-9_-]+$")
 
 #: Stand-in shown wherever a password field's value would otherwise be printed.
 MASK = "\u2022" * 8
@@ -152,6 +160,21 @@ class WizardView(_AuditMixin):
     finish_label = "Finish"
     finish_busy_label = "Working…"
     finish_icon = "check-lg"
+    #: Offer several finish buttons instead of one — "Save" next to "Save & Deploy".
+    #: A list of dicts; ``key`` is required, ``label``/``icon``/``busy_label``
+    #: fall back to the ``finish_*`` attributes above, ``class`` is any Bootstrap
+    #: button class, and ``message``/``redirect`` override ``success_message``
+    #: and ``finish_redirect`` for that button's default save::
+    #:
+    #:     finish_actions = [
+    #:         {"key": "save", "label": "Save only", "class": "btn-outline-success"},
+    #:         {"key": "deploy", "label": "Save & Deploy", "icon": "rocket-takeoff",
+    #:          "message": "Deployment queued", "redirect": "/jobs"},
+    #:     ]
+    #:
+    #: Each button posts to ``/{name}/finish?action={key}``; read the key back
+    #: with ``self.finish_action(request)`` inside ``on_finish``/``after_finish``.
+    finish_actions = None
     #: Where to send the user after a successful finish. Defaults to the model's
     #: list view, or back to the wizard when there is no model.
     finish_redirect = None
@@ -209,6 +232,10 @@ class WizardView(_AuditMixin):
             f["key"] for f in self.all_fields if f.get("type") == "password"
         }
 
+        # Render-ready buttons for the last step. Empty means the single
+        # default Finish button.
+        self.finish_actions_meta = self._resolve_finish_actions()
+
         self.router = APIRouter()
         self._setup_routes()
         self.setup_endpoints()
@@ -241,6 +268,58 @@ class WizardView(_AuditMixin):
                 f"form_widget_overrides."
             )
         return fields
+
+    def _resolve_finish_actions(self) -> List[dict]:
+        """Normalize ``finish_actions`` into render-ready button metadata.
+
+        Returns an empty list when the wizard uses the single default Finish
+        button, which is what the nav partial branches on.
+        """
+        if not self.finish_actions:
+            return []
+
+        cls_name = type(self).__name__
+        actions: List[dict] = []
+        seen = set()
+        for entry in self.finish_actions:
+            key = str(entry.get("key") or "").strip()
+            if not key:
+                raise ValueError(
+                    f"{cls_name} finish_actions entries must define a 'key'"
+                )
+            if not _ACTION_KEY_RE.match(key):
+                raise ValueError(
+                    f"{cls_name} finish action key {key!r} must contain only "
+                    f"letters, digits, underscores and hyphens"
+                )
+            if key in seen:
+                raise ValueError(f"{cls_name} has duplicate finish action key {key!r}")
+            seen.add(key)
+            actions.append({
+                "key": key,
+                "label": entry.get("label") or key.replace("_", " ").title(),
+                "busy_label": entry.get("busy_label", self.finish_busy_label),
+                "icon": entry.get("icon", self.finish_icon),
+                "class": entry.get("class", "btn-success"),
+                # Only consulted by the default save — an on_finish() that
+                # returns its own Response owns its toast and redirect.
+                "message": entry.get("message"),
+                "redirect": entry.get("redirect"),
+            })
+        return actions
+
+    def finish_action(self, request: Request = None) -> str | None:
+        """Which finish button was clicked, as its ``key``.
+
+        ``None`` when the wizard defines no ``finish_actions``. A missing or
+        unrecognized action falls back to the first one, so a stale page or a
+        hand-made POST behaves like the primary button rather than erroring.
+        """
+        if not self.finish_actions_meta:
+            return None
+        keys = [action["key"] for action in self.finish_actions_meta]
+        requested = request.query_params.get(ACTION_KEY) if request is not None else None
+        return requested if requested in keys else keys[0]
 
     def _prepare_fields(self, db: Session, meta: dict, data: dict) -> List[dict]:
         """Copy a step's fields and fill in current values and select choices."""
@@ -407,14 +486,25 @@ class WizardView(_AuditMixin):
                 # Unchecked checkboxes are never submitted.
                 setattr(item, key, False)
 
+    def _finish_outcome(self, request: Request) -> tuple:
+        """Toast message and redirect for this finish, honouring the action's
+        own ``message``/``redirect`` when it declares them."""
+        key = self.finish_action(request)
+        chosen = next((a for a in self.finish_actions_meta if a["key"] == key), {})
+        return (
+            chosen.get("message") or self.success_message,
+            chosen.get("redirect") or self.finish_redirect,
+        )
+
     def _default_finish(self, data: dict, db: Session, request: Request):
         """Create a model row from the collected data, or just say 'done'."""
+        message, redirect = self._finish_outcome(request)
         if self.model is None:
             self._audit_finish(data, request)
             return toast_response(
-                self.success_message,
+                message,
                 type="success",
-                redirect=self.finish_redirect or f"/{self.name}",
+                redirect=redirect or f"/{self.name}",
             )
         item = self.model()
         self.apply_data(item, data)
@@ -431,8 +521,11 @@ class WizardView(_AuditMixin):
             request=request,
             data=self._redact(self._audit_snapshot(item)),
         )
-        redirect = self.finish_redirect or f"/{self.model.__tablename__}"
-        return toast_response(self.success_message, type="success", redirect=redirect)
+        return toast_response(
+            message,
+            type="success",
+            redirect=redirect or f"/{self.model.__tablename__}",
+        )
 
     def _audit_finish(self, data: dict, request: Request, item=None) -> None:
         """Audit a wizard that completed without the default save.

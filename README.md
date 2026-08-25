@@ -48,6 +48,7 @@ A modern admin interface framework for FastAPI built with HTMX, Jinja2, and Boot
   - [Wizard Attributes](#wizard-attributes)
   - [Validating a Step](#validating-a-step)
   - [Finishing](#finishing)
+  - [Two Ways to Finish](#two-ways-to-finish)
   - [Wizards Without a Model](#wizards-without-a-model)
   - [Audit Logging and Passwords](#audit-logging-and-passwords)
   - [Custom Step Templates](#custom-step-templates)
@@ -2506,6 +2507,7 @@ Each entry in `steps` is a dict. Only `label` is required.
 | `finish_label` | `"Finish"` | Text on the last step's button |
 | `finish_icon` | `"check-lg"` | Icon on that button |
 | `finish_redirect` | model's list view | Where to go after a successful finish |
+| `finish_actions` | `None` | Several finish buttons instead of one -- see [Two ways to finish](#two-ways-to-finish) |
 | `success_message` | `"Completed successfully"` | Toast shown after finishing |
 | `allowed_users` / `allowed_groups` | `None` | Same access control as a CRUDView |
 | `audit_log` | `False` | Emit an audit event when the wizard finishes |
@@ -2549,6 +2551,50 @@ def on_finish(self, data, db, request=None):
     provision_device(data["hostname"], data["wan_ip"])
     return toast_response("Provisioning started", type="success", redirect="/devices")
 ```
+
+### Two ways to finish
+
+Set `finish_actions` when the last step needs more than one outcome -- "Save" beside "Save & Deploy". Each entry becomes a button, and they replace the single Finish button:
+
+```python
+class DeployFortigateWizard(WizardView):
+    name = "deploy_fortigate"
+    model = Fortigate
+    steps = [...]
+    finish_actions = [
+        {"key": "save", "label": "Save only", "icon": "save", "class": "btn-outline-success"},
+        {"key": "deploy", "label": "Save & Deploy", "icon": "rocket-takeoff",
+         "busy_label": "Deploying…", "message": "Deployment queued", "redirect": "/jobs"},
+    ]
+
+    def after_finish(self, item, data, db, request=None):
+        if self.finish_action(request) == "deploy":
+            start_deploy(item)
+```
+
+| Key | Default | Description |
+|---|---|---|
+| `key` | required | Identifier. Letters, digits, `_` and `-` only |
+| `label` | from `key` | Button text |
+| `icon` | `finish_icon` | Bootstrap Icons name. `None` for no icon |
+| `busy_label` | `finish_busy_label` | Text while the request is in flight |
+| `class` | `"btn-success"` | Any Bootstrap button class |
+| `message` | `success_message` | Toast for this button's default save |
+| `redirect` | `finish_redirect` | Where this button lands after the default save |
+
+`self.finish_action(request)` returns the key that was clicked -- available in any hook that receives the request: `before_save()`, `after_finish()` and `on_finish()`. Every button runs the same validation and the same default save, so branch on the key for the part that differs:
+
+```python
+def on_finish(self, data, db, request=None):
+    if self.finish_action(request) != "deploy":
+        return None                    # plain save -> the default create
+    ...                                # deploy path owns its own Response
+    return toast_response("Deploying", type="success", redirect=f"/jobs/{job.id}")
+```
+
+The action travels in the query string (`POST /deploy_fortigate/finish?action=deploy`), not in the form. That matters: anything in the form becomes carried-forward hidden state on a validation re-render, so a form-borne action would stack up across retries. A missing or unrecognized action falls back to the first entry, so a stale page behaves like the primary button.
+
+Audit events are unchanged -- the default save still emits `"create"` with the row snapshot. Call `self.audit(...)` in `after_finish()` if you want the chosen action in the trail.
 
 ### Wizards without a model
 
@@ -2657,7 +2703,7 @@ For a wizard with `name = "onboard"`:
 |---|---|---|
 | `GET` | `/onboard` | The wizard, starting at step 1 |
 | `POST` | `/onboard/step/{index}` | Render step `index` (validating the previous step when moving forward) |
-| `POST` | `/onboard/finish` | Validate the last step and finish |
+| `POST` | `/onboard/finish` | Validate the last step and finish (`?action={key}` with `finish_actions`) |
 
 ---
 
