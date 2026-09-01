@@ -7,7 +7,7 @@ HTMX interactions, dark/light theming, and OIDC authentication.
 
 from .crud import Admin, CRUDView, COLUMN_TYPE_MAP, toast_response, DEFAULT_TOAST_DELAYS, refresh_list_response, modal_response, console_response, console_sse_message, ansi_to_html, ValidationError, celery_send_task
 from .wizard import WizardView
-from .database import Base, init_db, get_db, get_engine
+from .database import Base, init_db, get_db, get_engine, db_session, get_pool_status
 from .auth import get_current_user, OidcAuthenticator, AuthError, AUTH_DISABLED
 from .ai_chat import ToolRegistry, tool_registry, AIProvider, OpenAICompatibleProvider, ai_complete
 
@@ -18,7 +18,7 @@ from importlib.metadata import PackageNotFoundError, version as _dist_version
 try:
     __version__ = _dist_version("fasthx-admin")
 except PackageNotFoundError:
-    __version__ = "0.6.2"
+    __version__ = "0.6.4"
 
 __all__ = [
     "Admin",
@@ -37,6 +37,8 @@ __all__ = [
     "init_db",
     "get_db",
     "get_engine",
+    "db_session",
+    "get_pool_status",
     "get_current_user",
     "OidcAuthenticator",
     "AuthError",
