@@ -354,7 +354,8 @@ All frontend dependencies are loaded via CDN. No npm, no build step, no bundler.
 
 - Version is in `setup.py` under `version` (the Jenkins pipeline rewrites that line from the git tag)
 - Use `setuptools` for builds; `pyproject.toml` only declares the build backend
-- Releases publish from Jenkins on a `vX.Y.Z` tag — see `Jenkinsfile` / `pod.yaml`
+- Releases publish from Jenkins on a `vX.Y.Z` tag — the private gtt index via
+  `pushPyPackage()`, then public pypi.org via the `PushToPublicPypi` stage
 - Source layout: all code under `src/fasthx_admin/`
 - Examples live in `examples/demo/`
 - Commit messages: `feat:`, `fix:`, `refactor:`, `docs:` prefixes
