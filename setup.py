@@ -18,7 +18,7 @@ with open(path.join(here, "README.md"), encoding="utf-8") as f:
 
 setup(
     name="fasthx-admin",
-    version="0.6.4",
+    version="0.6.5",
     description=(
         "FastAPI + HTMX + Jinja2 admin interface framework "
         "— a modern replacement for Flask-Admin"
