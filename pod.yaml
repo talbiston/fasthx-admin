@@ -1,0 +1,22 @@
+apiVersion: v1
+kind: Pod
+metadata:
+  labels:
+    jenkins: ucpe-jenkins-slave
+spec:
+  containers:
+  - name: ucpe-jenkins-dind
+    image: hub.build.gtt.net/ucpe/jenkins-slave-dind:latest
+    securityContext:
+      privileged: true
+    tty: true
+  - name: ucpe-jenkins-general
+    image: hub.build.gtt.net/ucpe/jenkins-slave-general:latest
+    tty: true
+    command:
+    - cat
+  imagePullSecrets:
+      - name: build.internal
+  volumeMounts:
+        - mountPath: /home/jenkins
+          name: workspace-volume

@@ -9,7 +9,7 @@
 **fasthx-admin** is a pip-installable admin interface framework for FastAPI. It generates full CRUD interfaces from SQLAlchemy models using HTMX for interactivity and Jinja2 for server-side rendering. It replaces Flask-Admin with a modern, composable architecture.
 
 - **Package:** `fasthx-admin` (PyPI)
-- **Build:** Hatchling, src layout (`src/fasthx_admin/`)
+- **Build:** Setuptools, src layout (`src/fasthx_admin/`)
 - **Python:** 3.9+
 - **License:** MIT
 - **Remote:** `git@github.com:talbiston/fasthx-admin.git`
@@ -352,8 +352,9 @@ All frontend dependencies are loaded via CDN. No npm, no build step, no bundler.
 
 ## Development Conventions
 
-- Version is in `pyproject.toml` under `[project] version`
-- Use `hatchling` for builds
+- Version is in `setup.py` under `version` (the Jenkins pipeline rewrites that line from the git tag)
+- Use `setuptools` for builds; `pyproject.toml` only declares the build backend
+- Releases publish from Jenkins on a `vX.Y.Z` tag — see `Jenkinsfile` / `pod.yaml`
 - Source layout: all code under `src/fasthx_admin/`
 - Examples live in `examples/demo/`
 - Commit messages: `feat:`, `fix:`, `refactor:`, `docs:` prefixes
