@@ -561,17 +561,20 @@ function initDependsOn(root) {
     });
 }
 
-// Auto-fill — a checkbox sets (and by default locks) other fields' values from
-// a JSON map. Config: data-autofill='{"target_field": spec, ...}' on the checkbox
-// input, where spec is either a bare value (fill and lock — the common case) or
-// {"value": ..., "lock": false} to fill while leaving the field editable. A spec
-// object with no "value" locks without filling.
+// Auto-fill — a checkbox fills other fields' values from a JSON map, and can
+// optionally hold them read-only for as long as it stays checked.
+// Config: data-autofill='{"target_field": spec, ...}' on the checkbox input,
+// where spec is either a bare value (fills, nothing more) or
+// {"value": ..., "lock": true} to also make the field read-only. Locking is
+// opt-in: the option is named for what it does by default and does only that,
+// so a lock is never a surprise to whoever reads the view next. A spec that
+// sets "lock" but no "value" holds the field read-only without filling it.
 // Checked -> remember each target's current value, then fill with the mapped
-// value and make it read-only. Unchecked (by the user) -> restore the remembered
-// value and re-enable the field. On initial render an unchecked box leaves
-// existing values untouched (don't wipe real data on edit).
-// A target with lock:false never has its readOnly touched in either direction,
-// so a field held read-only for some other reason is left alone.
+// value. Unchecked (by the user) -> restore the remembered value. On initial
+// render an unchecked box leaves existing values untouched (don't wipe real
+// data on edit).
+// A target that doesn't lock never has its readOnly touched in either
+// direction, so a field held read-only for some other reason is left alone.
 function initAutofill(root) {
     var container = root || document;
     container.querySelectorAll('input[type="checkbox"][data-autofill]').forEach(function (ctrl) {
@@ -590,8 +593,8 @@ function initAutofill(root) {
             var raw = map[key];
             var isObj = raw !== null && typeof raw === 'object' && !Array.isArray(raw);
             specs[key] = isObj
-                ? { value: raw.value, lock: raw.lock !== false }
-                : { value: raw, lock: true };
+                ? { value: raw.value, lock: !!raw.lock }
+                : { value: raw, lock: false };
         });
         var targets = Object.keys(specs);
         var saved = {}; // last user-entered value per target, captured on check
