@@ -2544,6 +2544,20 @@ class CRUDView(_AuditMixin):
                 # the resulting filename on the column (not the UploadFile).
                 self._apply_file_field(item, field, form_data)
                 continue
+            if not _depends_on_holds(field, form_data) and field.get(
+                "clear_when_hidden", True
+            ):
+                # A field whose depends_on conditions don't hold was hidden from
+                # the user. Hiding is CSS-only, so the input still posts — on an
+                # edit that means the *previous* value, which would otherwise be
+                # written straight back for a record it no longer applies to.
+                # Clear it instead. Doing it here rather than in the browser
+                # keeps the value in the input, so re-showing the field before
+                # saving restores it with nothing to remember.
+                # Opt out with "clear_when_hidden": False where the value must
+                # survive being hidden.
+                self._clear_hidden_column(item, mapper, key)
+                continue
             if key in form_data:
                 col = mapper.columns[key]
                 value = _coerce_column_value(col, form_data[key])
@@ -2574,6 +2588,22 @@ class CRUDView(_AuditMixin):
                     # dropped from the form) is still a missing value.
                     label = field.get("label") or key.replace("_", " ").title()
                     raise ValidationError(f"{label} is required")
+
+    def _clear_hidden_column(self, item, mapper, key):
+        """Blank the column behind a hidden form field.
+
+        Booleans clear to False, matching the "unchecked boxes aren't posted"
+        handling below. Everything else clears to None — except a NOT NULL
+        column, which is left untouched: there is no empty value it would
+        accept, and failing the whole save is worse than keeping the old one.
+        """
+        col = mapper.columns.get(key)
+        if col is None:
+            return
+        if type(col.type).__name__.upper() == "BOOLEAN":
+            setattr(item, key, False)
+        elif col.nullable:
+            setattr(item, key, None)
 
     def _apply_file_field(self, item, field, form_data):
         """Save an uploaded file for a ``type: "file"`` form field.

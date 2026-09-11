@@ -561,12 +561,17 @@ function initDependsOn(root) {
     });
 }
 
-// Auto-fill — a checkbox sets (and locks) other fields' values from a JSON map.
-// Config: data-autofill='{"target_field": "value", ...}' on the checkbox input.
+// Auto-fill — a checkbox sets (and by default locks) other fields' values from
+// a JSON map. Config: data-autofill='{"target_field": spec, ...}' on the checkbox
+// input, where spec is either a bare value (fill and lock — the common case) or
+// {"value": ..., "lock": false} to fill while leaving the field editable. A spec
+// object with no "value" locks without filling.
 // Checked -> remember each target's current value, then fill with the mapped
 // value and make it read-only. Unchecked (by the user) -> restore the remembered
 // value and re-enable the field. On initial render an unchecked box leaves
 // existing values untouched (don't wipe real data on edit).
+// A target with lock:false never has its readOnly touched in either direction,
+// so a field held read-only for some other reason is left alone.
 function initAutofill(root) {
     var container = root || document;
     container.querySelectorAll('input[type="checkbox"][data-autofill]').forEach(function (ctrl) {
@@ -578,21 +583,37 @@ function initAutofill(root) {
         } catch (e) {
             return;
         }
-        var targets = Object.keys(map);
+        // Normalize both spec forms to {value, lock} up front, so apply() below
+        // has one shape to deal with. An undefined value means "don't fill".
+        var specs = {};
+        Object.keys(map).forEach(function (key) {
+            var raw = map[key];
+            var isObj = raw !== null && typeof raw === 'object' && !Array.isArray(raw);
+            specs[key] = isObj
+                ? { value: raw.value, lock: raw.lock !== false }
+                : { value: raw, lock: true };
+        });
+        var targets = Object.keys(specs);
         var saved = {}; // last user-entered value per target, captured on check
         var apply = function (isUserToggle) {
             var checked = ctrl.checked;
             targets.forEach(function (key) {
                 var field = document.getElementById(key);
                 if (!field) return;
+                var spec = specs[key];
+                var fills = spec.value !== undefined;
                 if (checked) {
-                    if (isUserToggle) saved[key] = field.value; // remember before overwriting
-                    field.value = map[key];
-                    field.readOnly = true;
-                    field.classList.add('bg-body-secondary');
+                    if (isUserToggle && fills) saved[key] = field.value; // remember before overwriting
+                    if (fills) field.value = spec.value;
+                    if (spec.lock) {
+                        field.readOnly = true;
+                        field.classList.add('bg-body-secondary');
+                    }
                 } else {
-                    field.readOnly = false;
-                    field.classList.remove('bg-body-secondary');
+                    if (spec.lock) {
+                        field.readOnly = false;
+                        field.classList.remove('bg-body-secondary');
+                    }
                     if (isUserToggle && saved.hasOwnProperty(key)) {
                         field.value = saved[key]; // restore what was there before
                     }

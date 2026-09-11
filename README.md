@@ -547,7 +547,8 @@ Customize individual form fields with extra attributes or replace their type ent
 | `hx_swap` | HTMX `hx-swap` strategy (defaults to `"innerHTML"`) | `"hx_swap": "outerHTML"` |
 | `depends_on` | Checkbox field key (or list of keys) — this field is visible only while **all** of them are checked. Prefix a key with `!` to invert it (holds while *unchecked*) | `"depends_on": ["!wan1_is_pppoe", "!wan1_is_dhcp"]` |
 | `depends_on_any` | Same, but visible while **any** one of them holds | `"depends_on_any": ["is_ha", "is_cluster"]` |
-| `autofill` | On a checkbox — map of `{field_key: value}` to fill and lock while it is checked | `"autofill": {"wan1": "0.0.0.0/0"}` |
+| `clear_when_hidden` | Whether a field hidden by its `depends_on` conditions is cleared on save instead of writing back the value it still holds. Defaults to `True` — set `False` where the stored value must survive being hidden | `"clear_when_hidden": False` |
+| `autofill` | On a checkbox — map of `{field_key: spec}` to fill while it is checked. A bare `spec` fills **and** locks the field read-only; use `{"value": ..., "lock": False}` to fill it but leave it editable | `"autofill": {"wan1": "0.0.0.0/0", "wan1_gw": {"value": "0.0.0.0", "lock": False}}` |
 | `exclusive_with` | On a checkbox — field key (or list of keys) that must never be checked at the same time | `"exclusive_with": "wan1_is_pppoe"` |
 | `description` | Tooltip text shown as an info icon next to the field label (Bootstrap tooltip) | `"description": "Must be a public IP"` |
 
